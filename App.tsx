@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -83,6 +83,9 @@ export default function App() {
   const [showSellDatePicker, setShowSellDatePicker] = useState(false);
   const [tempSellDate, setTempSellDate] = useState(new Date());
   const [transactionType, setTransactionType] = useState<'all' | 'purchases' | 'sales'>('all');
+  const [showBackupModal, setShowBackupModal] = useState(false);
+  const [backupData, setBackupData] = useState('');
+  const [importData, setImportData] = useState('');
 
   useEffect(() => {
     checkBiometricSupport();
@@ -750,6 +753,85 @@ export default function App() {
     }
   };
 
+  const exportBackup = () => {
+    try {
+      const backup = {
+        version: '1.0',
+        exportDate: new Date().toISOString(),
+        purchases: purchases,
+        sales: sales,
+      };
+      
+      const backupString = JSON.stringify(backup, null, 2);
+      setBackupData(backupString);
+      setShowBackupModal(true);
+    } catch (error) {
+      console.error('Erro ao exportar backup:', error);
+      Alert.alert('Erro', 'Não foi possível gerar o backup');
+    }
+  };
+
+  const importBackup = async () => {
+    try {
+      if (!importData.trim()) {
+        Alert.alert('Erro', 'Cole os dados do backup no campo acima');
+        return;
+      }
+
+      const backup = JSON.parse(importData);
+      
+      if (!backup.purchases || !backup.sales) {
+        Alert.alert('Erro', 'Formato de backup inválido');
+        return;
+      }
+
+      Alert.alert(
+        'Confirmar Importação',
+        `Isso irá importar:\n• ${backup.purchases.length} compra(s)\n• ${backup.sales.length} venda(s)\n\nDeseja mesclar com dados existentes ou substituir tudo?`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Mesclar',
+            onPress: async () => {
+              const mergedPurchases = [...purchases, ...backup.purchases];
+              const mergedSales = [...sales, ...backup.sales];
+              
+              await savePurchases(mergedPurchases);
+              await saveSales(mergedSales);
+              
+              setPurchases(mergedPurchases);
+              setSales(mergedSales);
+              
+              setShowBackupModal(false);
+              setImportData('');
+              
+              Alert.alert('Sucesso!', 'Dados importados e mesclados com sucesso!');
+            }
+          },
+          {
+            text: 'Substituir',
+            style: 'destructive',
+            onPress: async () => {
+              await savePurchases(backup.purchases);
+              await saveSales(backup.sales);
+              
+              setPurchases(backup.purchases);
+              setSales(backup.sales);
+              
+              setShowBackupModal(false);
+              setImportData('');
+              
+              Alert.alert('Sucesso!', 'Dados substituídos com sucesso!');
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Erro ao importar:', error);
+      Alert.alert('Erro', 'Formato de backup inválido. Verifique se copiou corretamente.');
+    }
+  };
+
   const renderTabBar = () => (
     <View style={styles.tabBar}>
       <TouchableOpacity style={styles.tab} onPress={() => setScreen('home')}>
@@ -875,6 +957,10 @@ export default function App() {
               </View>
             ))
           )}
+          
+          <TouchableOpacity style={styles.backupButton} onPress={exportBackup}>
+            <Text style={styles.backupButtonText}>💾 Backup/Restaurar Dados</Text>
+          </TouchableOpacity>
           
           <View style={styles.homeFooter}>
             <Text style={styles.footerText}>
@@ -1554,6 +1640,88 @@ export default function App() {
               <TouchableOpacity 
                 style={styles.exportModalButton} 
                 onPress={() => setShowExportModal(false)}
+              >
+                <Text style={styles.exportModalButtonText}>Fechar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal de Backup/Restauração */}
+      <Modal transparent visible={showBackupModal} animationType="slide">
+        <View style={styles.exportModalOverlay}>
+          <View style={styles.exportModalContainer}>
+            <View style={styles.exportModalHeader}>
+              <Text style={styles.exportModalTitle}>💾 Backup e Restauração</Text>
+              <TouchableOpacity onPress={() => {
+                setShowBackupModal(false);
+                setBackupData('');
+                setImportData('');
+              }}>
+                <Text style={styles.exportModalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView style={styles.exportModalContent}>
+              {backupData ? (
+                <View>
+                  <Text style={styles.backupSectionTitle}>✅ Backup Gerado com Sucesso!</Text>
+                  <Text style={styles.backupInfo}>
+                    {purchases.length} compra(s) e {sales.length} venda(s)
+                  </Text>
+                  <Text style={styles.backupHint}>
+                    📋 Copie o código abaixo e salve em local seguro (email, nuvem, etc):
+                  </Text>
+                  <Text style={styles.exportModalText}>{backupData}</Text>
+                </View>
+              ) : (
+                <View>
+                  <TouchableOpacity 
+                    style={styles.backupActionButton} 
+                    onPress={exportBackup}
+                  >
+                    <Text style={styles.backupActionButtonText}>📥 Gerar Backup</Text>
+                  </TouchableOpacity>
+                  
+                  <View style={styles.backupSeparator}>
+                    <View style={styles.separatorLine} />
+                    <Text style={styles.separatorText}>OU</Text>
+                    <View style={styles.separatorLine} />
+                  </View>
+                  
+                  <Text style={styles.backupSectionTitle}>📤 Restaurar Backup</Text>
+                  <Text style={styles.backupHint}>
+                    Cole o código do backup abaixo:
+                  </Text>
+                  <TextInput
+                    style={styles.backupInput}
+                    value={importData}
+                    onChangeText={setImportData}
+                    placeholder="Cole aqui o código do backup..."
+                    placeholderTextColor="#999"
+                    multiline
+                    numberOfLines={8}
+                  />
+                  <TouchableOpacity 
+                    style={[styles.backupActionButton, !importData.trim() && styles.backupActionButtonDisabled]} 
+                    onPress={importBackup}
+                    disabled={!importData.trim()}
+                  >
+                    <Text style={styles.backupActionButtonText}>📤 Importar Dados</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </ScrollView>
+            
+            <View style={styles.exportModalFooter}>
+              <TouchableOpacity 
+                style={styles.exportModalButton} 
+                onPress={() => {
+                  setShowBackupModal(false);
+                  setBackupData('');
+                  setImportData('');
+                }}
               >
                 <Text style={styles.exportModalButtonText}>Fechar</Text>
               </TouchableOpacity>
@@ -2282,6 +2450,88 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  backupButton: {
+    backgroundColor: '#ff9800',
+    padding: 16,
+    borderRadius: 12,
+    marginTop: 20,
+    marginBottom: 10,
+    marginHorizontal: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  backupButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  backupSectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  backupInfo: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  backupHint: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 10,
+    fontStyle: 'italic',
+  },
+  backupActionButton: {
+    backgroundColor: '#6200ea',
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginVertical: 10,
+  },
+  backupActionButtonDisabled: {
+    backgroundColor: '#ccc',
+  },
+  backupActionButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  backupSeparator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  separatorLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#ddd',
+  },
+  separatorText: {
+    marginHorizontal: 15,
+    fontSize: 14,
+    color: '#999',
+    fontWeight: 'bold',
+  },
+  backupInput: {
+    backgroundColor: '#f5f5f5',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 12,
+    color: '#333',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    minHeight: 150,
+    textAlignVertical: 'top',
+    marginBottom: 15,
   },
   transactionTypeHeader: {
     fontSize: 14,
