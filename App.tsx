@@ -11,6 +11,8 @@ import {
   SafeAreaView,
   Platform,
   Modal,
+  Share,
+  Clipboard,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
@@ -819,6 +821,27 @@ export default function App() {
     } catch (error) {
       console.error('Erro ao exportar backup:', error);
       Alert.alert('Erro', 'Não foi possível gerar o backup');
+    }
+  };
+
+  const copyBackupToClipboard = () => {
+    if (backupData) {
+      Clipboard.setString(backupData);
+      Alert.alert('✅ Copiado!', 'O backup foi copiado para a área de transferência. Cole em um local seguro (WhatsApp, Email, Drive, etc.)');
+    }
+  };
+
+  const shareBackup = async () => {
+    try {
+      if (backupData) {
+        await Share.share({
+          message: `📦 Backup CapitalChain\n\nData: ${new Date().toLocaleDateString()}\n${purchases.length} compras e ${sales.length} vendas\n\n${backupData}`,
+          title: 'Backup CapitalChain'
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao compartilhar:', error);
+      Alert.alert('Erro', 'Não foi possível compartilhar o backup');
     }
   };
 
@@ -1762,10 +1785,37 @@ export default function App() {
                       <Text style={styles.backupInfo}>
                         {purchases.length} compra(s) e {sales.length} venda(s)
                       </Text>
-                      <Text style={styles.backupHint}>
-                        📋 Copie o código abaixo e salve em local seguro (email, nuvem, WhatsApp, etc):
+                      <Text style={styles.backupWarning}>
+                        ⚠️ IMPORTANTE: Este backup só existe nesta tela! Você precisa salvá-lo em um local seguro AGORA.
                       </Text>
-                      <Text style={styles.exportModalText}>{backupData}</Text>
+                      <Text style={styles.backupHint}>
+                        Use os botões abaixo para copiar ou compartilhar:
+                      </Text>
+                      
+                      <View style={styles.backupActionsRow}>
+                        <TouchableOpacity 
+                          style={styles.backupShareButton} 
+                          onPress={copyBackupToClipboard}
+                        >
+                          <Text style={styles.backupShareButtonText}>📋 Copiar</Text>
+                        </TouchableOpacity>
+                        
+                        <TouchableOpacity 
+                          style={styles.backupShareButton} 
+                          onPress={shareBackup}
+                        >
+                          <Text style={styles.backupShareButtonText}>📤 Compartilhar</Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      <Text style={styles.backupCodeLabel}>Código do Backup:</Text>
+                      <ScrollView style={styles.backupCodeContainer} nestedScrollEnabled={true}>
+                        <Text style={styles.exportModalText}>{backupData}</Text>
+                      </ScrollView>
+                      
+                      <Text style={styles.backupSaveHint}>
+                        💡 Sugestões: Envie por WhatsApp para você mesmo, salve no Google Drive, ou envie por email.
+                      </Text>
                     </View>
                   ) : (
                     <View>
@@ -2705,6 +2755,58 @@ const styles = StyleSheet.create({
     color: '#666',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  backupWarning: {
+    backgroundColor: '#fff3cd',
+    borderLeftWidth: 4,
+    borderLeftColor: '#ff9800',
+    padding: 12,
+    borderRadius: 8,
+    marginVertical: 15,
+    fontSize: 14,
+    color: '#856404',
+    fontWeight: 'bold',
+  },
+  backupActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginVertical: 15,
+  },
+  backupShareButton: {
+    flex: 1,
+    backgroundColor: '#6200ea',
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  backupShareButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  backupCodeLabel: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#666',
+    marginBottom: 10,
+  },
+  backupCodeContainer: {
+    maxHeight: 200,
+    backgroundColor: '#f5f5f5',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 15,
+  },
+  backupSaveHint: {
+    fontSize: 13,
+    color: '#666',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    backgroundColor: '#e8f5e9',
+    padding: 10,
+    borderRadius: 8,
   },
   transactionTypeHeader: {
     fontSize: 14,
