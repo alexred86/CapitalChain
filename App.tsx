@@ -1483,18 +1483,17 @@ export default function App() {
         report += '═══════════════════════════════════════\n\n';
         
         taxData.taxMonths.forEach(month => {
-          const [year, monthNum] = month.monthKey.split('-');
-          const monthName = new Date(parseInt(year), parseInt(monthNum) - 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+          const monthName = new Date(parseInt(month.year), parseInt(month.month) - 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
           
           report += `📅 ${monthName.toUpperCase()}\n`;
-          report += `   Vendas: ${formatCurrency(month.totalSales)}\n`;
-          report += `   Custo: ${formatCurrency(month.totalCost)}\n`;
-          report += `   Lucro: ${formatCurrency(month.totalProfit)}\n`;
+          report += `   Vendas: ${formatCurrency(month.sales)}\n`;
+          report += `   Custo: ${formatCurrency(month.cost)}\n`;
+          report += `   Lucro: ${formatCurrency(month.profit)}\n`;
           
           if (month.isTaxable) {
             report += `   ⚠️ TRIBUTÁVEL (vendas > R$ 35.000)\n`;
             report += `   💰 Imposto devido: ${formatCurrency(month.taxDue)}\n`;
-            report += `   📆 Vencimento DARF: ${new Date(month.dueDate).toLocaleDateString('pt-BR')}\n`;
+            report += `   📆 Vencimento DARF: ${month.dueDate}\n`;
             report += `   Status: ${month.isPending ? '⏰ PENDENTE' : '✅ Pago'}\n`;
           } else {
             report += `   ✅ Isento (vendas ≤ R$ 35.000)\n`;
@@ -1512,7 +1511,7 @@ export default function App() {
           report += `${asset.coin}\n`;
           report += `   Quantidade: ${asset.quantity.toFixed(8)}\n`;
           report += `   Custo médio: ${formatCurrency(asset.averageCost)}\n`;
-          report += `   Valor total: ${formatCurrency(asset.totalValue)}\n`;
+          report += `   Valor total: ${formatCurrency(asset.totalCost)}\n`;
           report += `   Código IR: 81 - Criptoativo\n\n`;
         });
         
@@ -1629,8 +1628,7 @@ export default function App() {
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>📊 Vendas Mensais</Text>
               {taxData.taxMonths.map((month, index) => {
-                const [year, monthNum] = month.monthKey.split('-');
-                const monthName = new Date(parseInt(year), parseInt(monthNum) - 1)
+                const monthName = new Date(parseInt(month.year), parseInt(month.month) - 1)
                   .toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
                 
                 return (
@@ -1638,16 +1636,16 @@ export default function App() {
                     <Text style={styles.taxMonthTitle}>{monthName}</Text>
                     <View style={styles.taxMonthDetails}>
                       <Text style={styles.taxMonthLabel}>Vendas:</Text>
-                      <Text style={styles.taxMonthValue}>{formatCurrency(month.totalSales)}</Text>
+                      <Text style={styles.taxMonthValue}>{formatCurrency(month.sales)}</Text>
                     </View>
                     <View style={styles.taxMonthDetails}>
                       <Text style={styles.taxMonthLabel}>Custo:</Text>
-                      <Text style={styles.taxMonthValue}>{formatCurrency(month.totalCost)}</Text>
+                      <Text style={styles.taxMonthValue}>{formatCurrency(month.cost)}</Text>
                     </View>
                     <View style={styles.taxMonthDetails}>
                       <Text style={styles.taxMonthLabel}>Lucro:</Text>
-                      <Text style={[styles.taxMonthValue, month.totalProfit > 0 ? styles.profitPositive : styles.profitNegative]}>
-                        {formatCurrency(month.totalProfit)}
+                      <Text style={[styles.taxMonthValue, month.profit > 0 ? styles.profitPositive : styles.profitNegative]}>
+                        {formatCurrency(month.profit)}
                       </Text>
                     </View>
                     {month.isTaxable ? (
@@ -1655,7 +1653,7 @@ export default function App() {
                         <Text style={styles.taxDueLabel}>💰 Imposto devido:</Text>
                         <Text style={styles.taxDueAmount}>{formatCurrency(month.taxDue)}</Text>
                         <Text style={styles.taxDueDate}>
-                          Venc: {new Date(month.dueDate).toLocaleDateString('pt-BR')}
+                          Venc: {month.dueDate}
                         </Text>
                       </View>
                     ) : (
@@ -1685,7 +1683,7 @@ export default function App() {
                       Custo médio: {formatCurrency(asset.averageCost)}
                     </Text>
                     <Text style={styles.patrimonyValue}>
-                      Valor: {formatCurrency(asset.totalValue)}
+                      Valor: {formatCurrency(asset.totalCost)}
                     </Text>
                   </View>
                 ))}
