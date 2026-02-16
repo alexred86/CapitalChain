@@ -539,8 +539,7 @@ export default function App() {
       const taxDue = isTaxable && data.profit > 0 ? data.profit * taxRate : 0;
       
       // Vencimento do DARF é último dia do mês seguinte
-      const dueDate = new Date(parseInt(year), parseInt(month), 0);
-      dueDate.setDate(0); // Último dia do mês seguinte
+      const dueDate = new Date(parseInt(year), parseInt(month) + 1, 0); // Último dia do mês seguinte
       
       taxMonths.push({
         year,
@@ -563,12 +562,15 @@ export default function App() {
     purchases.forEach((p) => {
       const existing = coinPatrimony.get(p.coin) || { quantity: 0, averageCost: 0 };
       const newQuantity = existing.quantity + p.quantity;
-      const newAverageCost = ((existing.averageCost * existing.quantity) + (p.pricePaid * p.dollarRate)) / newQuantity;
       
-      coinPatrimony.set(p.coin, {
-        quantity: newQuantity,
-        averageCost: newAverageCost,
-      });
+      if (newQuantity > 0) {
+        const newAverageCost = ((existing.averageCost * existing.quantity) + (p.pricePaid * p.dollarRate)) / newQuantity;
+        
+        coinPatrimony.set(p.coin, {
+          quantity: newQuantity,
+          averageCost: newAverageCost,
+        });
+      }
     });
 
     sales.forEach((s) => {

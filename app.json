@@ -22,7 +22,7 @@
       }
     },
     "android": {
-      "versionCode": 7,
+      "versionCode": 8,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#6200ea"
@@ -48,7 +48,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "2c40f21e-792e-4b3d-b39c-97d56f31b5ba"
+        "projectId": "dbe7391c-7164-4435-8412-d5fa9c0fda16"
       }
     }
   }
