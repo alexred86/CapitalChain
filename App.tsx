@@ -48,6 +48,22 @@ const formatCurrency = (value: number): string => {
   }).format(value);
 };
 
+const formatCurrencyBRL = (value: number, hide: boolean = false): string => {
+  if (hide) return 'R$ ****';
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(value);
+};
+
+const formatDollarHide = (value: number, hide: boolean = false): string => {
+  if (hide) return '$ ****';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(value);
+};
+
 const formatDate = (dateString: string): string => {
   const date = new Date(dateString);
   return date.toLocaleDateString('pt-BR');
@@ -89,6 +105,7 @@ export default function App() {
   const [backupData, setBackupData] = useState('');
   const [importData, setImportData] = useState('');
   const [backupMode, setBackupMode] = useState<'menu' | 'generate' | 'restore'>('menu'); // Novo estado
+  const [hideValues, setHideValues] = useState(false); // Ocultar valores
 
   useEffect(() => {
     checkBiometricSupport();
@@ -1005,6 +1022,18 @@ export default function App() {
     }
   };
 
+  const renderHeader = () => (
+    <View style={styles.header}>
+      <Text style={styles.headerTitle}>CapitalChain</Text>
+      <TouchableOpacity 
+        style={styles.hideButton} 
+        onPress={() => setHideValues(!hideValues)}
+      >
+        <Text style={styles.hideButtonText}>{hideValues ? '🙈' : '👁️'}</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
   const renderTabBar = () => (
     <View style={styles.tabBar}>
       <TouchableOpacity style={styles.tab} onPress={() => setScreen('home')}>
@@ -1086,11 +1115,19 @@ export default function App() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>CapitalChain</Text>
-          <View style={styles.totalCard}>
-            <Text style={styles.totalLabel}>Total Investido</Text>
-            <Text style={styles.totalValue}>{formatCurrency(totalInvested)}</Text>
+          <View style={styles.headerLeft}>
+            <Text style={styles.headerTitle}>CapitalChain</Text>
+            <View style={styles.totalCard}>
+              <Text style={styles.totalLabel}>Total Investido</Text>
+              <Text style={styles.totalValue}>{hideValues ? '$ ****' : formatCurrency(totalInvested)}</Text>
+            </View>
           </View>
+          <TouchableOpacity 
+            style={styles.hideButton} 
+            onPress={() => setHideValues(!hideValues)}
+          >
+            <Text style={styles.hideButtonText}>{hideValues ? '🙈' : '👁️'}</Text>
+          </TouchableOpacity>
         </View>
 
         <ScrollView style={styles.content}>
@@ -1107,27 +1144,27 @@ export default function App() {
                 <Text style={styles.coinName}>{item.coin}</Text>
                 <View style={styles.row}>
                   <Text style={styles.label}>Disponível:</Text>
-                  <Text style={[styles.value, styles.availableQuantity]}>{item.available.toFixed(8)}</Text>
+                  <Text style={[styles.value, styles.availableQuantity]}>{hideValues ? '****' : item.available.toFixed(8)}</Text>
                 </View>
                 {item.sold > 0 && (
                   <View style={styles.row}>
                     <Text style={styles.label}>Vendido:</Text>
-                    <Text style={styles.value}>{item.sold.toFixed(8)}</Text>
+                    <Text style={styles.value}>{hideValues ? '****' : item.sold.toFixed(8)}</Text>
                   </View>
                 )}
                 <View style={styles.row}>
                   <Text style={styles.label}>Investido:</Text>
-                  <Text style={styles.value}>{formatCurrency(item.totalInvested)}</Text>
+                  <Text style={styles.value}>{hideValues ? '$ ****' : formatCurrency(item.totalInvested)}</Text>
                 </View>
                 <View style={styles.row}>
                   <Text style={styles.label}>Preço Médio:</Text>
-                  <Text style={styles.value}>{formatCurrency(item.averagePrice)}</Text>
+                  <Text style={styles.value}>{hideValues ? '$ ****' : formatCurrency(item.averagePrice)}</Text>
                 </View>
                 {item.totalProfit !== 0 && (
                   <View style={styles.row}>
                     <Text style={styles.label}>{item.totalProfit >= 0 ? 'Lucro:' : 'Prejuízo:'}</Text>
                     <Text style={[styles.value, item.totalProfit >= 0 ? styles.profit : styles.loss]}>
-                      {formatCurrency(Math.abs(item.totalProfit))}
+                      {hideValues ? '$ ****' : formatCurrency(Math.abs(item.totalProfit))}
                     </Text>
                   </View>
                 )}
@@ -2459,12 +2496,30 @@ const styles = StyleSheet.create({
     backgroundColor: '#6200ea',
     padding: 20,
     paddingTop: Platform.OS === 'ios' ? 20 : 40,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  headerLeft: {
+    flex: 1,
   },
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#fff',
     marginBottom: 10,
+  },
+  hideButton: {
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 5,
+  },
+  hideButtonText: {
+    fontSize: 28,
   },
   subtitle: {
     fontSize: 14,
