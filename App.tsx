@@ -86,6 +86,7 @@ export default function App() {
   const [showBackupModal, setShowBackupModal] = useState(false);
   const [backupData, setBackupData] = useState('');
   const [importData, setImportData] = useState('');
+  const [backupMode, setBackupMode] = useState<'menu' | 'generate' | 'restore'>('menu'); // Novo estado
 
   useEffect(() => {
     checkBiometricSupport();
@@ -1703,46 +1704,92 @@ export default function App() {
         <View style={styles.exportModalOverlay}>
           <View style={styles.exportModalContainer}>
             <View style={styles.exportModalHeader}>
-              <Text style={styles.exportModalTitle}>💾 Backup e Restauração</Text>
+              <Text style={styles.exportModalTitle}>
+                {backupMode === 'menu' && '💾 Backup e Restauração'}
+                {backupMode === 'generate' && '📥 Gerar Backup'}
+                {backupMode === 'restore' && '📤 Restaurar Backup'}
+              </Text>
               <TouchableOpacity onPress={() => {
                 setShowBackupModal(false);
                 setBackupData('');
                 setImportData('');
+                setBackupMode('menu');
               }}>
                 <Text style={styles.exportModalClose}>✕</Text>
               </TouchableOpacity>
             </View>
             
             <ScrollView style={styles.exportModalContent}>
-              {backupData ? (
+              {backupMode === 'menu' && (
                 <View>
-                  <Text style={styles.backupSectionTitle}>✅ Backup Gerado com Sucesso!</Text>
-                  <Text style={styles.backupInfo}>
-                    {purchases.length} compra(s) e {sales.length} venda(s)
+                  <Text style={styles.backupMenuDescription}>
+                    Escolha uma opção abaixo:
                   </Text>
-                  <Text style={styles.backupHint}>
-                    📋 Copie o código abaixo e salve em local seguro (email, nuvem, etc):
-                  </Text>
-                  <Text style={styles.exportModalText}>{backupData}</Text>
-                </View>
-              ) : (
-                <View>
+                  
                   <TouchableOpacity 
-                    style={styles.backupActionButton} 
-                    onPress={exportBackup}
+                    style={styles.backupMenuButton} 
+                    onPress={() => setBackupMode('generate')}
                   >
-                    <Text style={styles.backupActionButtonText}>📥 Gerar Backup</Text>
+                    <Text style={styles.backupMenuIcon}>📥</Text>
+                    <View style={styles.backupMenuTextContainer}>
+                      <Text style={styles.backupMenuTitle}>Gerar Backup</Text>
+                      <Text style={styles.backupMenuSubtitle}>
+                        Salvar uma cópia de todos os seus dados
+                      </Text>
+                    </View>
                   </TouchableOpacity>
                   
-                  <View style={styles.backupSeparator}>
-                    <View style={styles.separatorLine} />
-                    <Text style={styles.separatorText}>OU</Text>
-                    <View style={styles.separatorLine} />
-                  </View>
-                  
-                  <Text style={styles.backupSectionTitle}>📤 Restaurar Backup</Text>
+                  <TouchableOpacity 
+                    style={styles.backupMenuButton} 
+                    onPress={() => setBackupMode('restore')}
+                  >
+                    <Text style={styles.backupMenuIcon}>📤</Text>
+                    <View style={styles.backupMenuTextContainer}>
+                      <Text style={styles.backupMenuTitle}>Restaurar Backup</Text>
+                      <Text style={styles.backupMenuSubtitle}>
+                        Importar dados de um backup anterior
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {backupMode === 'generate' && (
+                <View>
+                  {backupData ? (
+                    <View>
+                      <Text style={styles.backupSectionTitle}>✅ Backup Gerado com Sucesso!</Text>
+                      <Text style={styles.backupInfo}>
+                        {purchases.length} compra(s) e {sales.length} venda(s)
+                      </Text>
+                      <Text style={styles.backupHint}>
+                        📋 Copie o código abaixo e salve em local seguro (email, nuvem, WhatsApp, etc):
+                      </Text>
+                      <Text style={styles.exportModalText}>{backupData}</Text>
+                    </View>
+                  ) : (
+                    <View>
+                      <Text style={styles.backupInfo}>
+                        Seus dados: {purchases.length} compra(s) e {sales.length} venda(s)
+                      </Text>
+                      <Text style={styles.backupHint}>
+                        O backup será gerado em formato JSON. Você poderá copiar e salvar onde quiser.
+                      </Text>
+                      <TouchableOpacity 
+                        style={styles.backupActionButton} 
+                        onPress={exportBackup}
+                      >
+                        <Text style={styles.backupActionButtonText}>📥 Gerar Código do Backup</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {backupMode === 'restore' && (
+                <View>
                   <Text style={styles.backupHint}>
-                    Cole o código do backup abaixo:
+                    Cole abaixo o código do backup que você salvou anteriormente:
                   </Text>
                   <TextInput
                     style={styles.backupInput}
@@ -1751,7 +1798,7 @@ export default function App() {
                     placeholder="Cole aqui o código do backup..."
                     placeholderTextColor="#999"
                     multiline
-                    numberOfLines={8}
+                    numberOfLines={10}
                   />
                   <TouchableOpacity 
                     style={[styles.backupActionButton, !importData.trim() && styles.backupActionButtonDisabled]} 
@@ -1765,12 +1812,25 @@ export default function App() {
             </ScrollView>
             
             <View style={styles.exportModalFooter}>
+              {backupMode !== 'menu' && (
+                <TouchableOpacity 
+                  style={styles.backupBackButton} 
+                  onPress={() => {
+                    setBackupMode('menu');
+                    setBackupData('');
+                    setImportData('');
+                  }}
+                >
+                  <Text style={styles.backupBackButtonText}>⬅ Voltar</Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity 
                 style={styles.exportModalButton} 
                 onPress={() => {
                   setShowBackupModal(false);
                   setBackupData('');
                   setImportData('');
+                  setBackupMode('menu');
                 }}
               >
                 <Text style={styles.exportModalButtonText}>Fechar</Text>
@@ -2594,6 +2654,57 @@ const styles = StyleSheet.create({
     minHeight: 150,
     textAlignVertical: 'top',
     marginBottom: 15,
+  },
+  backupMenuDescription: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  backupMenuButton: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 15,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#6200ea',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  backupMenuIcon: {
+    fontSize: 40,
+    marginRight: 15,
+  },
+  backupMenuTextContainer: {
+    flex: 1,
+  },
+  backupMenuTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#6200ea',
+    marginBottom: 5,
+  },
+  backupMenuSubtitle: {
+    fontSize: 14,
+    color: '#666',
+  },
+  backupBackButton: {
+    flex: 1,
+    padding: 15,
+    borderRadius: 8,
+    backgroundColor: '#f5f5f5',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  backupBackButtonText: {
+    color: '#666',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   transactionTypeHeader: {
     fontSize: 14,
