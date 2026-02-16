@@ -262,69 +262,119 @@ export default function App() {
   const renderDatePicker = (visible: boolean, date: Date, onDateChange: (date: Date) => void, onConfirm: () => void, onCancel: () => void) => {
     if (!visible) return null;
 
-    const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-    const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).getDay();
     const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
-    
-    const days = [];
-    for (let i = 0; i < firstDay; i++) {
-      days.push(null);
-    }
-    for (let i = 1; i <= daysInMonth; i++) {
-      days.push(i);
-    }
+    const currentYear = new Date().getFullYear();
+    const years = Array.from({ length: 50 }, (_, i) => currentYear - i); // Últimos 50 anos
+    const months = monthNames.map((name, index) => ({ name, value: index }));
+    const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+    const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
     return (
       <Modal transparent visible={visible} animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.datePickerContainer}>
-            <View style={styles.datePickerHeader}>
-              <TouchableOpacity onPress={() => {
-                const newDate = new Date(date);
-                newDate.setMonth(date.getMonth() - 1);
-                onDateChange(newDate);
-              }}>
-                <Text style={styles.datePickerNav}>◀</Text>
-              </TouchableOpacity>
-              <Text style={styles.datePickerTitle}>{monthNames[date.getMonth()]} {date.getFullYear()}</Text>
-              <TouchableOpacity onPress={() => {
-                const newDate = new Date(date);
-                newDate.setMonth(date.getMonth() + 1);
-                onDateChange(newDate);
-              }}>
-                <Text style={styles.datePickerNav}>▶</Text>
-              </TouchableOpacity>
+            <Text style={styles.datePickerTitle}>📅 Selecione a Data</Text>
+            
+            <View style={styles.dateSelectorsRow}>
+              {/* Seletor de Dia */}
+              <View style={styles.dateSelectorColumn}>
+                <Text style={styles.dateSelectorLabel}>Dia</Text>
+                <ScrollView style={styles.dateScrollView} showsVerticalScrollIndicator={true}>
+                  {days.map((day) => (
+                    <TouchableOpacity
+                      key={day}
+                      style={[
+                        styles.dateOption,
+                        day === date.getDate() && styles.dateOptionSelected,
+                      ]}
+                      onPress={() => {
+                        const newDate = new Date(date);
+                        newDate.setDate(day);
+                        onDateChange(newDate);
+                      }}
+                    >
+                      <Text style={[
+                        styles.dateOptionText,
+                        day === date.getDate() && styles.dateOptionTextSelected,
+                      ]}>
+                        {day}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+
+              {/* Seletor de Mês */}
+              <View style={styles.dateSelectorColumn}>
+                <Text style={styles.dateSelectorLabel}>Mês</Text>
+                <ScrollView style={styles.dateScrollView} showsVerticalScrollIndicator={true}>
+                  {months.map((month) => (
+                    <TouchableOpacity
+                      key={month.value}
+                      style={[
+                        styles.dateOption,
+                        month.value === date.getMonth() && styles.dateOptionSelected,
+                      ]}
+                      onPress={() => {
+                        const newDate = new Date(date);
+                        newDate.setMonth(month.value);
+                        // Ajustar dia se necessário
+                        const maxDay = new Date(newDate.getFullYear(), month.value + 1, 0).getDate();
+                        if (newDate.getDate() > maxDay) {
+                          newDate.setDate(maxDay);
+                        }
+                        onDateChange(newDate);
+                      }}
+                    >
+                      <Text style={[
+                        styles.dateOptionText,
+                        month.value === date.getMonth() && styles.dateOptionTextSelected,
+                      ]}>
+                        {month.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+
+              {/* Seletor de Ano */}
+              <View style={styles.dateSelectorColumn}>
+                <Text style={styles.dateSelectorLabel}>Ano</Text>
+                <ScrollView style={styles.dateScrollView} showsVerticalScrollIndicator={true}>
+                  {years.map((year) => (
+                    <TouchableOpacity
+                      key={year}
+                      style={[
+                        styles.dateOption,
+                        year === date.getFullYear() && styles.dateOptionSelected,
+                      ]}
+                      onPress={() => {
+                        const newDate = new Date(date);
+                        newDate.setFullYear(year);
+                        // Ajustar dia se necessário (ex: 29 de fev em ano não bissexto)
+                        const maxDay = new Date(year, newDate.getMonth() + 1, 0).getDate();
+                        if (newDate.getDate() > maxDay) {
+                          newDate.setDate(maxDay);
+                        }
+                        onDateChange(newDate);
+                      }}
+                    >
+                      <Text style={[
+                        styles.dateOptionText,
+                        year === date.getFullYear() && styles.dateOptionTextSelected,
+                      ]}>
+                        {year}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
             </View>
 
-            <View style={styles.calendarGrid}>
-              {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((day, i) => (
-                <Text key={i} style={styles.weekDay}>{day}</Text>
-              ))}
-              {days.map((day, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={[
-                    styles.calendarDay,
-                    day === date.getDate() && styles.calendarDaySelected,
-                    !day && styles.calendarDayEmpty,
-                  ]}
-                  onPress={() => {
-                    if (day) {
-                      const newDate = new Date(date);
-                      newDate.setDate(day);
-                      onDateChange(newDate);
-                    }
-                  }}
-                  disabled={!day}
-                >
-                  <Text style={[
-                    styles.calendarDayText,
-                    day === date.getDate() && styles.calendarDayTextSelected,
-                  ]}>
-                    {day || ''}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+            <View style={styles.datePickerPreview}>
+              <Text style={styles.datePickerPreviewText}>
+                📆 {date.getDate()} de {monthNames[date.getMonth()]} de {date.getFullYear()}
+              </Text>
             </View>
 
             <View style={styles.datePickerButtons}>
@@ -2305,57 +2355,69 @@ const styles = StyleSheet.create({
     padding: 20,
     width: '90%',
     maxWidth: 400,
-  },
-  datePickerHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
+    maxHeight: '80%',
   },
   datePickerTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
-  },
-  datePickerNav: {
-    fontSize: 24,
-    color: '#6200ea',
-    fontWeight: 'bold',
-    padding: 10,
-  },
-  calendarGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    textAlign: 'center',
     marginBottom: 20,
   },
-  weekDay: {
-    width: '14.28%',
-    textAlign: 'center',
-    fontSize: 12,
+  dateSelectorsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 15,
+    height: 300,
+  },
+  dateSelectorColumn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  dateSelectorLabel: {
+    fontSize: 14,
     fontWeight: 'bold',
-    color: '#666',
-    marginBottom: 10,
+    color: '#6200ea',
+    textAlign: 'center',
+    padding: 10,
+    backgroundColor: '#f5f5f5',
+    borderBottomWidth: 1,
+    borderBottomColor: '#ddd',
   },
-  calendarDay: {
-    width: '14.28%',
-    aspectRatio: 1,
-    justifyContent: 'center',
+  dateScrollView: {
+    flex: 1,
+  },
+  dateOption: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
     alignItems: 'center',
-    borderRadius: 20,
   },
-  calendarDayEmpty: {
-    backgroundColor: 'transparent',
-  },
-  calendarDaySelected: {
+  dateOptionSelected: {
     backgroundColor: '#6200ea',
   },
-  calendarDayText: {
+  dateOptionText: {
     fontSize: 14,
     color: '#333',
   },
-  calendarDayTextSelected: {
+  dateOptionTextSelected: {
     color: '#fff',
     fontWeight: 'bold',
+  },
+  datePickerPreview: {
+    backgroundColor: '#f5f5f5',
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 15,
+    alignItems: 'center',
+  },
+  datePickerPreviewText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#6200ea',
   },
   datePickerButtons: {
     flexDirection: 'row',
