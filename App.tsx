@@ -54,7 +54,7 @@ const formatDate = (dateString: string): string => {
 };
 
 export default function App() {
-  const [screen, setScreen] = useState<'home' | 'add' | 'sell' | 'history'>('home');
+  const [screen, setScreen] = useState<'home' | 'add' | 'sell' | 'history' | 'taxes'>('home');
   const [purchases, setPurchases] = useState<CryptoPurchase[]>([]);
   const [sales, setSales] = useState<CryptoSale[]>([]);
   const [coin, setCoin] = useState('');
@@ -510,6 +510,103 @@ export default function App() {
     return summary.sort((a, b) => b.revenue - a.revenue);
   };
 
+  const calculateTaxReport = () => {
+    // Agrupar vendas por mês/ano
+    const monthlyData = new Map<string, { sales: number; cost: number; profit: number; transactions: CryptoSale[] }>();
+    
+    sales.forEach((sale) => {
+      const date = new Date(sale.date);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      
+      const existing = monthlyData.get(monthKey) || { sales: 0, cost: 0, profit: 0, transactions: [] };
+      const saleBRL = sale.priceSold * sale.dollarRate;
+      const costBRL = (sale.priceSold - sale.profit) * sale.dollarRate;
+      
+      monthlyData.set(monthKey, {
+        sales: existing.sales + saleBRL,
+        cost: existing.cost + costBRL,
+        profit: existing.profit + (sale.profit * sale.dollarRate),
+        transactions: [...existing.transactions, sale],
+      });
+    });
+
+    // Calcular impostos mensais
+    const taxMonths: any[] = [];
+    monthlyData.forEach((data, monthKey) => {
+      const [year, month] = monthKey.split('-');
+      const isTaxable = data.sales > 35000;
+      const taxRate = 0.15; // 15% sobre o lucro
+      const taxDue = isTaxable && data.profit > 0 ? data.profit * taxRate : 0;
+      
+      // Vencimento do DARF é último dia do mês seguinte
+      const dueDate = new Date(parseInt(year), parseInt(month), 0);
+      dueDate.setDate(0); // Último dia do mês seguinte
+      
+      taxMonths.push({
+        year,
+        month,
+        monthName: ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
+                    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'][parseInt(month) - 1],
+        sales: data.sales,
+        cost: data.cost,
+        profit: data.profit,
+        isTaxable,
+        taxDue,
+        dueDate: dueDate.toLocaleDateString('pt-BR'),
+        isPending: isTaxable && taxDue > 0,
+      });
+    });
+
+    // Calcular patrimônio em 31/12 (usando custo médio)
+    const coinPatrimony = new Map<string, { quantity: number; averageCost: number }>();
+    
+    purchases.forEach((p) => {
+      const existing = coinPatrimony.get(p.coin) || { quantity: 0, averageCost: 0 };
+      const newQuantity = existing.quantity + p.quantity;
+      const newAverageCost = ((existing.averageCost * existing.quantity) + (p.pricePaid * p.dollarRate)) / newQuantity;
+      
+      coinPatrimony.set(p.coin, {
+        quantity: newQuantity,
+        averageCost: newAverageCost,
+      });
+    });
+
+    sales.forEach((s) => {
+      const existing = coinPatrimony.get(s.coin);
+      if (existing) {
+        coinPatrimony.set(s.coin, {
+          ...existing,
+          quantity: existing.quantity - s.quantity,
+        });
+      }
+    });
+
+    const patrimonyAssets: any[] = [];
+    let totalPatrimony = 0;
+    
+    coinPatrimony.forEach((data, coinName) => {
+      if (data.quantity > 0) {
+        const totalCost = data.quantity * data.averageCost;
+        totalPatrimony += totalCost;
+        
+        patrimonyAssets.push({
+          coin: coinName,
+          quantity: data.quantity,
+          averageCost: data.averageCost,
+          totalCost,
+        });
+      }
+    });
+
+    return {
+      taxMonths: taxMonths.sort((a, b) => `${a.year}-${a.month}`.localeCompare(`${b.year}-${b.month}`)),
+      patrimonyAssets: patrimonyAssets.sort((a, b) => b.totalCost - a.totalCost),
+      totalPatrimony,
+      needsDeclaration: totalPatrimony > 5000 || sales.length > 0,
+      pendingDARFs: taxMonths.filter(m => m.isPending),
+    };
+  };
+
   const handleAddPurchase = async () => {
     try {
       if (!coin.trim()) {
@@ -926,6 +1023,11 @@ export default function App() {
       <TouchableOpacity style={styles.tab} onPress={() => setScreen('history')}>
         <Text style={screen === 'history' ? styles.tabTextActive : styles.tabText}>
           📋{'\n'}Histórico
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.tab} onPress={() => setScreen('taxes')}>
+        <Text style={screen === 'taxes' ? styles.tabTextActive : styles.tabText}>
+          💰{'\n'}Impostos
         </Text>
       </TouchableOpacity>
     </View>
@@ -1347,6 +1449,284 @@ export default function App() {
           handleSellDateConfirm,
           () => setShowSellDatePicker(false)
         )}
+      </SafeAreaView>
+    );
+  }
+
+  // TAXES
+  if (screen === 'taxes') {
+    const taxData = calculateTaxReport();
+    const currentDate = new Date();
+    const currentMonth = currentDate.getMonth() + 1; // 1-12
+    const isDeclarationPeriod = currentMonth >= 1 && currentMonth <= 4;
+    
+    const allClear = taxData.pendingDARFs.length === 0 && (!taxData.needsDeclaration || !isDeclarationPeriod);
+
+    const exportTaxReport = () => {
+      let report = '📊 RELATÓRIO DE IMPOSTOS - CRIPTOMOEDAS\n\n';
+      
+      report += '═══════════════════════════════════════\n';
+      report += 'RESUMO GERAL\n';
+      report += '═══════════════════════════════════════\n\n';
+      
+      if (taxData.taxMonths.length === 0) {
+        report += '✅ Nenhuma operação tributável encontrada\n\n';
+      } else {
+        report += `Total de meses com operações: ${taxData.taxMonths.length}\n`;
+        report += `DARFs pendentes: ${taxData.pendingDARFs.length}\n`;
+        report += `Patrimônio total: ${formatCurrency(taxData.totalPatrimony)}\n\n`;
+        
+        report += '═══════════════════════════════════════\n';
+        report += 'VENDAS MENSAIS\n';
+        report += '═══════════════════════════════════════\n\n';
+        
+        taxData.taxMonths.forEach(month => {
+          const [year, monthNum] = month.monthKey.split('-');
+          const monthName = new Date(parseInt(year), parseInt(monthNum) - 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+          
+          report += `📅 ${monthName.toUpperCase()}\n`;
+          report += `   Vendas: ${formatCurrency(month.totalSales)}\n`;
+          report += `   Custo: ${formatCurrency(month.totalCost)}\n`;
+          report += `   Lucro: ${formatCurrency(month.totalProfit)}\n`;
+          
+          if (month.isTaxable) {
+            report += `   ⚠️ TRIBUTÁVEL (vendas > R$ 35.000)\n`;
+            report += `   💰 Imposto devido: ${formatCurrency(month.taxDue)}\n`;
+            report += `   📆 Vencimento DARF: ${new Date(month.dueDate).toLocaleDateString('pt-BR')}\n`;
+            report += `   Status: ${month.isPending ? '⏰ PENDENTE' : '✅ Pago'}\n`;
+          } else {
+            report += `   ✅ Isento (vendas ≤ R$ 35.000)\n`;
+          }
+          report += '\n';
+        });
+      }
+      
+      if (taxData.patrimonyAssets.length > 0) {
+        report += '═══════════════════════════════════════\n';
+        report += 'BENS E DIREITOS (31/12)\n';
+        report += '═══════════════════════════════════════\n\n';
+        
+        taxData.patrimonyAssets.forEach(asset => {
+          report += `${asset.coin}\n`;
+          report += `   Quantidade: ${asset.quantity.toFixed(8)}\n`;
+          report += `   Custo médio: ${formatCurrency(asset.averageCost)}\n`;
+          report += `   Valor total: ${formatCurrency(asset.totalValue)}\n`;
+          report += `   Código IR: 81 - Criptoativo\n\n`;
+        });
+        
+        report += `TOTAL DO PATRIMÔNIO: ${formatCurrency(taxData.totalPatrimony)}\n\n`;
+        
+        if (taxData.needsDeclaration) {
+          report += '⚠️ DECLARAÇÃO OBRIGATÓRIA\n';
+          report += 'Patrimônio > R$ 5.000 ou houve vendas no ano\n';
+        }
+      }
+      
+      report += '\n═══════════════════════════════════════\n';
+      report += 'Relatório gerado em: ' + new Date().toLocaleDateString('pt-BR') + '\n';
+      report += 'CapitalChain - Gestor de Criptomoedas\n';
+      
+      return report;
+    };
+
+    const shareReport = async () => {
+      try {
+        await Share.share({
+          message: exportTaxReport(),
+          title: 'Relatório de Impostos - Criptomoedas'
+        });
+      } catch (error) {
+        Alert.alert('Erro', 'Não foi possível compartilhar o relatório');
+      }
+    };
+
+    const copyReport = async () => {
+      await Clipboard.setStringAsync(exportTaxReport());
+      Alert.alert('✅ Copiado!', 'Relatório copiado para a área de transferência');
+    };
+
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>💰 Impostos</Text>
+          <Text style={styles.subtitle}>Relatório para Declaração IR</Text>
+        </View>
+
+        <ScrollView style={styles.content}>
+          {allClear ? (
+            <View style={styles.taxCardGreen}>
+              <Text style={styles.taxCardTitle}>✅ Tudo em ordem!</Text>
+              <Text style={styles.taxCardText}>
+                Você não possui DARFs pendentes no momento.
+              </Text>
+              {!taxData.needsDeclaration && (
+                <Text style={styles.taxCardText}>
+                  Seu patrimônio está abaixo de R$ 5.000 e você não realizou vendas, portanto não é necessário declarar.
+                </Text>
+              )}
+              {taxData.needsDeclaration && !isDeclarationPeriod && (
+                <Text style={styles.taxCardText}>
+                  Você precisará declarar na próxima temporada (jan-abr).
+                </Text>
+              )}
+            </View>
+          ) : (
+            <View>
+              {taxData.pendingDARFs.length > 0 && (
+                <View style={styles.taxCardRed}>
+                  <Text style={styles.taxCardTitle}>⚠️ DARFs Pendentes</Text>
+                  <Text style={styles.taxCardText}>
+                    Você possui {taxData.pendingDARFs.length} DARF(s) a pagar:
+                  </Text>
+                  {taxData.pendingDARFs.map((month, index) => {
+                    const [year, monthNum] = month.monthKey.split('-');
+                    const monthName = new Date(parseInt(year), parseInt(monthNum) - 1)
+                      .toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+                    
+                    return (
+                      <View key={index} style={styles.darfItem}>
+                        <Text style={styles.darfMonth}>📅 {monthName}</Text>
+                        <Text style={styles.darfAmount}>Imposto: {formatCurrency(month.taxDue)}</Text>
+                        <Text style={styles.darfDue}>
+                          Vencimento: {new Date(month.dueDate).toLocaleDateString('pt-BR')}
+                        </Text>
+                        <Text style={styles.darfProfit}>
+                          Lucro: {formatCurrency(month.totalProfit)} | Vendas: {formatCurrency(month.totalSales)}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+
+              {taxData.needsDeclaration && isDeclarationPeriod && (
+                <View style={styles.taxCardYellow}>
+                  <Text style={styles.taxCardTitle}>📋 Período de Declaração</Text>
+                  <Text style={styles.taxCardText}>
+                    Estamos no período de declaração do IR (janeiro a abril).
+                  </Text>
+                  <Text style={styles.taxCardText}>
+                    Seu patrimônio em 31/12: {formatCurrency(taxData.totalPatrimony)}
+                  </Text>
+                  {taxData.totalPatrimony > 5000 && (
+                    <Text style={styles.taxCardText}>
+                      ⚠️ Obrigatório declarar (patrimônio {'>'} R$ 5.000)
+                    </Text>
+                  )}
+                  {sales.length > 0 && (
+                    <Text style={styles.taxCardText}>
+                      ⚠️ Obrigatório declarar (houve vendas no ano)
+                    </Text>
+                  )}
+                </View>
+              )}
+            </View>
+          )}
+
+          {taxData.taxMonths.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>📊 Vendas Mensais</Text>
+              {taxData.taxMonths.map((month, index) => {
+                const [year, monthNum] = month.monthKey.split('-');
+                const monthName = new Date(parseInt(year), parseInt(monthNum) - 1)
+                  .toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+                
+                return (
+                  <View key={index} style={month.isTaxable ? styles.taxMonthCardTaxable : styles.taxMonthCard}>
+                    <Text style={styles.taxMonthTitle}>{monthName}</Text>
+                    <View style={styles.taxMonthDetails}>
+                      <Text style={styles.taxMonthLabel}>Vendas:</Text>
+                      <Text style={styles.taxMonthValue}>{formatCurrency(month.totalSales)}</Text>
+                    </View>
+                    <View style={styles.taxMonthDetails}>
+                      <Text style={styles.taxMonthLabel}>Custo:</Text>
+                      <Text style={styles.taxMonthValue}>{formatCurrency(month.totalCost)}</Text>
+                    </View>
+                    <View style={styles.taxMonthDetails}>
+                      <Text style={styles.taxMonthLabel}>Lucro:</Text>
+                      <Text style={[styles.taxMonthValue, month.totalProfit > 0 ? styles.profitPositive : styles.profitNegative]}>
+                        {formatCurrency(month.totalProfit)}
+                      </Text>
+                    </View>
+                    {month.isTaxable ? (
+                      <View style={styles.taxDueContainer}>
+                        <Text style={styles.taxDueLabel}>💰 Imposto devido:</Text>
+                        <Text style={styles.taxDueAmount}>{formatCurrency(month.taxDue)}</Text>
+                        <Text style={styles.taxDueDate}>
+                          Venc: {new Date(month.dueDate).toLocaleDateString('pt-BR')}
+                        </Text>
+                      </View>
+                    ) : (
+                      <Text style={styles.taxExempt}>✅ Isento (vendas ≤ R$ 35.000)</Text>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          {taxData.patrimonyAssets.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>📦 Bens e Direitos (31/12)</Text>
+              <View style={styles.patrimonyCard}>
+                <Text style={styles.patrimonyTotal}>
+                  Total: {formatCurrency(taxData.totalPatrimony)}
+                </Text>
+                {taxData.patrimonyAssets.map((asset, index) => (
+                  <View key={index} style={styles.patrimonyItem}>
+                    <Text style={styles.patrimonyCode}>Código 81 - Criptoativo</Text>
+                    <Text style={styles.patrimonyCoin}>{asset.coin}</Text>
+                    <Text style={styles.patrimonyQuantity}>
+                      Quantidade: {asset.quantity.toFixed(8)}
+                    </Text>
+                    <Text style={styles.patrimonyCost}>
+                      Custo médio: {formatCurrency(asset.averageCost)}
+                    </Text>
+                    <Text style={styles.patrimonyValue}>
+                      Valor: {formatCurrency(asset.totalValue)}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {(taxData.taxMonths.length > 0 || taxData.patrimonyAssets.length > 0) && (
+            <View style={styles.exportSection}>
+              <Text style={styles.exportTitle}>📤 Exportar Relatório</Text>
+              <TouchableOpacity style={styles.exportButton} onPress={shareReport}>
+                <Text style={styles.exportButtonText}>📲 Compartilhar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.exportButton} onPress={copyReport}>
+                <Text style={styles.exportButtonText}>📋 Copiar</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <View style={styles.taxInfo}>
+            <Text style={styles.taxInfoTitle}>ℹ️ Informações Importantes</Text>
+            <Text style={styles.taxInfoText}>
+              • Vendas até R$ 35.000/mês são isentas de imposto
+            </Text>
+            <Text style={styles.taxInfoText}>
+              • Acima desse valor: 15% sobre o lucro
+            </Text>
+            <Text style={styles.taxInfoText}>
+              • DARF vence no último dia do mês seguinte à venda
+            </Text>
+            <Text style={styles.taxInfoText}>
+              • Declaração obrigatória se patrimônio {'>'} R$ 5.000 em 31/12
+            </Text>
+            <Text style={styles.taxInfoText}>
+              • Mesmo com patrimônio baixo, declarar se houve vendas
+            </Text>
+            <Text style={styles.taxInfoText}>
+              • Código IR: 81 - Criptoativo
+            </Text>
+          </View>
+        </ScrollView>
+
+        {renderTabBar()}
       </SafeAreaView>
     );
   }
@@ -2853,5 +3233,245 @@ const styles = StyleSheet.create({
     color: '#333',
     marginTop: 10,
     marginBottom: 8,
+  },
+  // Tax styles
+  taxCardGreen: {
+    backgroundColor: '#e8f5e9',
+    borderLeftWidth: 4,
+    borderLeftColor: '#4caf50',
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 15,
+  },
+  taxCardRed: {
+    backgroundColor: '#ffebee',
+    borderLeftWidth: 4,
+    borderLeftColor: '#f44336',
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 15,
+  },
+  taxCardYellow: {
+    backgroundColor: '#fff8e1',
+    borderLeftWidth: 4,
+    borderLeftColor: '#ffc107',
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 15,
+  },
+  taxCardTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 10,
+  },
+  taxCardText: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 5,
+    lineHeight: 20,
+  },
+  darfItem: {
+    backgroundColor: '#fff',
+    padding: 12,
+    borderRadius: 6,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#f44336',
+  },
+  darfMonth: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 5,
+  },
+  darfAmount: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#f44336',
+    marginBottom: 3,
+  },
+  darfDue: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 3,
+  },
+  darfProfit: {
+    fontSize: 12,
+    color: '#999',
+  },
+  taxMonthCard: {
+    backgroundColor: '#fff',
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 10,
+    borderLeftWidth: 4,
+    borderLeftColor: '#4caf50',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+  },
+  taxMonthCardTaxable: {
+    backgroundColor: '#fff',
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 10,
+    borderLeftWidth: 4,
+    borderLeftColor: '#f44336',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+  },
+  taxMonthTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 10,
+    textTransform: 'capitalize',
+  },
+  taxMonthDetails: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 5,
+  },
+  taxMonthLabel: {
+    fontSize: 14,
+    color: '#666',
+  },
+  taxMonthValue: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  profitPositive: {
+    color: '#4caf50',
+  },
+  profitNegative: {
+    color: '#f44336',
+  },
+  taxDueContainer: {
+    backgroundColor: '#ffebee',
+    padding: 10,
+    borderRadius: 6,
+    marginTop: 10,
+  },
+  taxDueLabel: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#f44336',
+    marginBottom: 3,
+  },
+  taxDueAmount: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#f44336',
+    marginBottom: 3,
+  },
+  taxDueDate: {
+    fontSize: 12,
+    color: '#666',
+  },
+  taxExempt: {
+    fontSize: 14,
+    color: '#4caf50',
+    fontWeight: 'bold',
+    marginTop: 10,
+  },
+  patrimonyCard: {
+    backgroundColor: '#fff',
+    padding: 15,
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#6200ea',
+  },
+  patrimonyTotal: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#6200ea',
+    marginBottom: 15,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  patrimonyItem: {
+    backgroundColor: '#f5f5f5',
+    padding: 12,
+    borderRadius: 6,
+    marginBottom: 10,
+  },
+  patrimonyCode: {
+    fontSize: 12,
+    color: '#6200ea',
+    fontWeight: 'bold',
+    marginBottom: 5,
+  },
+  patrimonyCoin: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 5,
+  },
+  patrimonyQuantity: {
+    fontSize: 13,
+    color: '#666',
+    marginBottom: 3,
+  },
+  patrimonyCost: {
+    fontSize: 13,
+    color: '#666',
+    marginBottom: 3,
+  },
+  patrimonyValue: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#4caf50',
+  },
+  exportSection: {
+    backgroundColor: '#fff',
+    padding: 15,
+    borderRadius: 8,
+    marginTop: 10,
+    marginBottom: 15,
+  },
+  exportTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 10,
+  },
+  exportButton: {
+    backgroundColor: '#6200ea',
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  exportButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  taxInfo: {
+    backgroundColor: '#e3f2fd',
+    padding: 15,
+    borderRadius: 8,
+    marginTop: 10,
+    marginBottom: 20,
+  },
+  taxInfoTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1976d2',
+    marginBottom: 10,
+  },
+  taxInfoText: {
+    fontSize: 13,
+    color: '#666',
+    marginBottom: 5,
+    lineHeight: 18,
   },
 });
