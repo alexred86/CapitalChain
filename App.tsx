@@ -553,7 +553,7 @@ export default function App() {
   };
 
   const calculateTaxReport = () => {
-    // Agrupar vendas por mês/ano
+    // Nova regra 2026: Exchanges internacionais - 15% sobre qualquer ganho, sem isenção
     const monthlyData = new Map<string, { sales: number; cost: number; profit: number; transactions: CryptoSale[] }>();
     
     sales.forEach((sale) => {
@@ -574,11 +574,30 @@ export default function App() {
 
     // Calcular impostos mensais
     const taxMonths: any[] = [];
+    let yearlyProfit = 0; // Para compensação de perdas dentro do ano
+    let yearlyLoss = 0;
+    
     monthlyData.forEach((data, monthKey) => {
       const [year, month] = monthKey.split('-');
-      const isTaxable = data.sales > 35000;
-      const taxRate = 0.15; // 15% sobre o lucro
-      const taxDue = isTaxable && data.profit > 0 ? data.profit * taxRate : 0;
+      
+      // Nova regra 2026: SEM isenção de R$ 35k para exchanges internacionais
+      // 15% sobre QUALQUER ganho de capital
+      const isTaxable = data.profit > 0; // Qualquer lucro é tributável
+      const taxRate = 0.15;
+      const taxDue = data.profit > 0 ? data.profit * taxRate : 0;
+      
+      // Acumular lucros e perdas do ano para compensação
+      if (data.profit > 0) {
+        yearlyProfit += data.profit;
+      } else {
+        yearlyLoss += Math.abs(data.profit);
+      }
+      // Acumular lucros e perdas do ano para compensação
+      if (data.profit > 0) {
+        yearlyProfit += data.profit;
+      } else {
+        yearlyLoss += Math.abs(data.profit);
+      }
       
       // Vencimento do DARF é último dia do mês seguinte
       const dueDate = new Date(parseInt(year), parseInt(month) + 1, 0); // Último dia do mês seguinte
@@ -594,7 +613,7 @@ export default function App() {
         isTaxable,
         taxDue,
         dueDate: dueDate.toLocaleDateString('pt-BR'),
-        isPending: isTaxable && taxDue > 0,
+        isPending: taxDue > 0,
       });
     });
 
@@ -642,12 +661,20 @@ export default function App() {
       }
     });
 
+    // Compensação de perdas dentro do ano
+    const netProfit = yearlyProfit - yearlyLoss;
+    const compensatedTax = netProfit > 0 ? netProfit * 0.15 : 0;
+
     return {
       taxMonths: taxMonths.sort((a, b) => `${a.year}-${a.month}`.localeCompare(`${b.year}-${b.month}`)),
       patrimonyAssets: patrimonyAssets.sort((a, b) => b.totalCost - a.totalCost),
       totalPatrimony,
       needsDeclaration: totalPatrimony > 5000 || sales.length > 0,
       pendingDARFs: taxMonths.filter(m => m.isPending),
+      yearlyProfit,
+      yearlyLoss,
+      netProfit,
+      compensatedTax, // Imposto total após compensação de perdas
     };
   };
 
@@ -1527,7 +1554,24 @@ export default function App() {
     const allClear = taxData.pendingDARFs.length === 0 && (!taxData.needsDeclaration || !isDeclarationPeriod);
 
     const exportTaxReport = () => {
-      let report = '📊 RELATÓRIO DE IMPOSTOS - CRIPTOMOEDAS\n\n';
+      let report = '📊 RELATÓRIO DE IMPOSTOS - CRIPTOMOEDAS 2026\n\n';
+      
+      report += '═══════════════════════════════════════\n';
+      report += '🌍 NOVA LEI 2026 - EXCHANGES INTERNACIONAIS\n';
+      report += '═══════════════════════════════════════\n';
+      report += '• 15% sobre QUALQUER ganho de capital\n';
+      report += '• SEM isenção de R$ 35.000\n';
+      report += '• Compensação de perdas dentro do ano\n\n';
+      
+      if (taxData.netProfit > 0) {
+        report += '═══════════════════════════════════════\n';
+        report += '💰 RESULTADO ANUAL\n';
+        report += '═══════════════════════════════════════\n';
+        report += `Lucro Total: ${formatCurrency(taxData.yearlyProfit)}\n`;
+        report += `Prejuízo Total: ${formatCurrency(taxData.yearlyLoss)}\n`;
+        report += `Lucro Líquido: ${formatCurrency(taxData.netProfit)}\n`;
+        report += `\n⚠️ IMPOSTO TOTAL (após compensação): ${formatCurrency(taxData.compensatedTax)}\n\n`;
+      }
       
       report += '═══════════════════════════════════════\n';
       report += 'RESUMO GERAL\n';
@@ -1550,15 +1594,15 @@ export default function App() {
           report += `📅 ${monthName.toUpperCase()}\n`;
           report += `   Vendas: ${formatCurrency(month.sales)}\n`;
           report += `   Custo: ${formatCurrency(month.cost)}\n`;
-          report += `   Lucro: ${formatCurrency(month.profit)}\n`;
+          report += `   ${month.profit >= 0 ? 'Lucro' : 'Prejuízo'}: ${formatCurrency(Math.abs(month.profit))}\n`;
           
-          if (month.isTaxable) {
-            report += `   ⚠️ TRIBUTÁVEL (vendas > R$ 35.000)\n`;
+          if (month.profit > 0) {
+            report += `   ⚠️ TRIBUTÁVEL (15% sobre ganho de capital)\n`;
             report += `   💰 Imposto devido: ${formatCurrency(month.taxDue)}\n`;
             report += `   📆 Vencimento DARF: ${month.dueDate}\n`;
             report += `   Status: ${month.isPending ? '⏰ PENDENTE' : '✅ Pago'}\n`;
-          } else {
-            report += `   ✅ Isento (vendas ≤ R$ 35.000)\n`;
+          } else if (month.profit < 0) {
+            report += `   ✅ Prejuízo pode compensar lucros no ano\n`;
           }
           report += '\n';
         });
@@ -1612,10 +1656,34 @@ export default function App() {
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>💰 Impostos</Text>
-          <Text style={styles.subtitle}>Relatório para Declaração IR</Text>
+          <Text style={styles.subtitle}>Relatório para Declaração IR 2026</Text>
         </View>
 
         <ScrollView style={styles.content}>
+          <View style={styles.taxCardBlue}>
+            <Text style={styles.taxCardTitle}>🌍 Nova Lei 2026 - Exchanges Internacionais</Text>
+            <Text style={styles.taxCardText}>
+              • 15% sobre QUALQUER ganho de capital{"\n"}
+              • SEM isenção de R$ 35.000{"\n"}
+              • Compensação de perdas dentro do ano
+            </Text>
+          </View>
+
+          {taxData.netProfit > 0 && (
+            <View style={styles.taxCardOrange}>
+              <Text style={styles.taxCardTitle}>💰 Resultado Anual</Text>
+              <Text style={styles.taxCardText}>
+                Lucro: {formatCurrency(taxData.yearlyProfit)}{"\n"}
+                Prejuízo: {formatCurrency(taxData.yearlyLoss)}{"\n"}
+                Lucro Líquido: {formatCurrency(taxData.netProfit)}{"\n"}
+                {"\n"}
+                <Text style={{ fontWeight: 'bold', fontSize: 16 }}>
+                  Imposto Total: {formatCurrency(taxData.compensatedTax)}
+                </Text>
+              </Text>
+            </View>
+          )}
+
           {allClear ? (
             <View style={styles.taxCardGreen}>
               <Text style={styles.taxCardTitle}>✅ Tudo em ordem!</Text>
@@ -1710,16 +1778,18 @@ export default function App() {
                         {formatCurrency(month.profit)}
                       </Text>
                     </View>
-                    {month.isTaxable ? (
+                    {month.profit > 0 ? (
                       <View style={styles.taxDueContainer}>
-                        <Text style={styles.taxDueLabel}>💰 Imposto devido:</Text>
+                        <Text style={styles.taxDueLabel}>💰 Imposto devido (15%):</Text>
                         <Text style={styles.taxDueAmount}>{formatCurrency(month.taxDue)}</Text>
                         <Text style={styles.taxDueDate}>
                           Venc: {month.dueDate}
                         </Text>
                       </View>
+                    ) : month.profit < 0 ? (
+                      <Text style={styles.taxExempt}>✅ Prejuízo pode compensar lucros no ano</Text>
                     ) : (
-                      <Text style={styles.taxExempt}>✅ Isento (vendas ≤ R$ 35.000)</Text>
+                      <Text style={styles.taxExempt}>➖ Sem lucro ou prejuízo</Text>
                     )}
                   </View>
                 );
@@ -3319,6 +3389,22 @@ const styles = StyleSheet.create({
     backgroundColor: '#e8f5e9',
     borderLeftWidth: 4,
     borderLeftColor: '#4caf50',
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 15,
+  },
+  taxCardBlue: {
+    backgroundColor: '#e3f2fd',
+    borderLeftWidth: 4,
+    borderLeftColor: '#2196f3',
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 15,
+  },
+  taxCardOrange: {
+    backgroundColor: '#fff3e0',
+    borderLeftWidth: 4,
+    borderLeftColor: '#ff9800',
     padding: 15,
     borderRadius: 8,
     marginBottom: 15,
