@@ -64,6 +64,31 @@ const formatDollarHide = (value: number, hide: boolean = false): string => {
   }).format(value);
 };
 
+// Formatar preço com casas decimais dinâmicas
+const formatPrice = (value: number, hide: boolean = false): string => {
+  if (hide) return '$ ****';
+  
+  // Se valor >= $1, usa 2-4 casas decimais
+  if (value >= 1) {
+    // Verifica se precisa mostrar mais casas decimais
+    const rounded = Math.round(value * 10000) / 10000;
+    if (rounded !== Math.round(value * 100) / 100) {
+      return `$${value.toFixed(4)}`; // 4 casas decimais
+    }
+    return formatCurrency(value); // 2 casas decimais padrão
+  }
+  
+  // Se valor < $1, usa 8 casas decimais
+  return `$${value.toFixed(8)}`;
+};
+
+// Formatar quantidade com casas decimais dinâmicas
+const formatQuantity = (value: number): string => {
+  // Remove zeros à direita desnecessários
+  const formatted = value.toFixed(8);
+  return formatted.replace(/\.?0+$/, '');
+};
+
 const formatDate = (dateString: string): string => {
   const date = new Date(dateString);
   return date.toLocaleDateString('pt-BR');
@@ -749,7 +774,7 @@ export default function App() {
       if (qty > available) {
         Alert.alert(
           'Quantidade Insuficiente',
-          `Você só tem ${available.toFixed(8)} ${coinUpper} disponível para vender.`
+          `Você só tem ${formatQuantity(available)} ${coinUpper} disponível para vender.`
         );
         return;
       }
@@ -839,8 +864,8 @@ export default function App() {
         content += '-'.repeat(50) + '\n';
         purchaseSummary.forEach(item => {
           content += `\n${item.coin}\n`;
-          content += `  Quantidade Comprada: ${item.totalQuantity.toFixed(8)}\n`;
-          content += `  Preço Médio: ${formatCurrency(item.averagePrice)}\n`;
+          content += `  Quantidade Comprada: ${formatQuantity(item.totalQuantity)}\n`;
+          content += `  Preço Médio: ${formatPrice(item.averagePrice)}\n`;
           content += `  Investido (USD): ${formatCurrency(item.totalInvested)}\n`;
           content += `  Custo em Reais: R$ ${item.totalDollarCost.toFixed(2)}\n`;
           content += `  Dólar Médio: R$ ${item.averageDollarRate.toFixed(2)}\n`;
@@ -860,8 +885,8 @@ export default function App() {
         content += '-'.repeat(50) + '\n';
         salesSummary.forEach(item => {
           content += `\n${item.coin}\n`;
-          content += `  Quantidade Vendida: ${item.totalSold.toFixed(8)}\n`;
-          content += `  Preço Médio de Venda: ${formatCurrency(item.averageSalePrice)}\n`;
+          content += `  Quantidade Vendida: ${formatQuantity(item.totalSold)}\n`;
+          content += `  Preço Médio de Venda: ${formatPrice(item.averageSalePrice)}\n`;
           content += `  Receita (USD): ${formatCurrency(item.revenue)}\n`;
           content += `  Receita em Reais: R$ ${item.totalDollarRevenue.toFixed(2)}\n`;
           content += `  Dólar Médio: R$ ${item.averageDollarRate.toFixed(2)}\n`;
@@ -887,7 +912,7 @@ export default function App() {
           content += `\n${index + 1}. ${formatDate(purchase.date)} - ${purchase.coin}\n`;
           content += `   Quantidade: ${purchase.quantity}\n`;
           content += `   Valor Pago: ${formatCurrency(purchase.pricePaid)}\n`;
-          content += `   Preço Unit.: ${formatCurrency(purchase.pricePerUnit)}\n`;
+          content += `   Preço Unit.: ${formatPrice(purchase.pricePerUnit)}\n`;
           content += `   Dólar: R$ ${purchase.dollarRate.toFixed(2)}\n`;
           content += `   Custo R$: R$ ${(purchase.pricePaid * purchase.dollarRate).toFixed(2)}\n`;
         });
@@ -903,7 +928,7 @@ export default function App() {
           content += `\n${index + 1}. ${formatDate(sale.date)} - ${sale.coin}\n`;
           content += `   Quantidade: ${sale.quantity}\n`;
           content += `   Valor Recebido: ${formatCurrency(sale.priceSold)}\n`;
-          content += `   Preço Unit.: ${formatCurrency(sale.pricePerUnit)}\n`;
+          content += `   Preço Unit.: ${formatPrice(sale.pricePerUnit)}\n`;
           content += `   Dólar: R$ ${sale.dollarRate.toFixed(2)}\n`;
           content += `   Receita R$: R$ ${(sale.priceSold * sale.dollarRate).toFixed(2)}\n`;
           content += `   ${sale.profit >= 0 ? 'Lucro' : 'Prejuízo'}: ${formatCurrency(Math.abs(sale.profit))}\n`;
@@ -1144,12 +1169,12 @@ export default function App() {
                 <Text style={styles.coinName}>{item.coin}</Text>
                 <View style={styles.row}>
                   <Text style={styles.label}>Disponível:</Text>
-                  <Text style={[styles.value, styles.availableQuantity]}>{hideValues ? '****' : item.available.toFixed(8)}</Text>
+                  <Text style={[styles.value, styles.availableQuantity]}>{formatQuantity(item.available)}</Text>
                 </View>
                 {item.sold > 0 && (
                   <View style={styles.row}>
                     <Text style={styles.label}>Vendido:</Text>
-                    <Text style={styles.value}>{hideValues ? '****' : item.sold.toFixed(8)}</Text>
+                    <Text style={styles.value}>{formatQuantity(item.sold)}</Text>
                   </View>
                 )}
                 <View style={styles.row}>
@@ -1158,7 +1183,7 @@ export default function App() {
                 </View>
                 <View style={styles.row}>
                   <Text style={styles.label}>Preço Médio:</Text>
-                  <Text style={styles.value}>{hideValues ? '$ ****' : formatCurrency(item.averagePrice)}</Text>
+                  <Text style={styles.value}>{hideValues ? '$ ****' : formatPrice(item.averagePrice)}</Text>
                 </View>
                 {item.totalProfit !== 0 && (
                   <View style={styles.row}>
@@ -1373,7 +1398,7 @@ export default function App() {
                     onPress={() => setSellCoin(item.coin)}
                   >
                     <Text style={styles.availableCoinName}>{item.coin}</Text>
-                    <Text style={styles.availableCoinQty}>{item.available.toFixed(8)}</Text>
+                    <Text style={styles.availableCoinQty}>{formatQuantity(item.available)}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -1546,7 +1571,7 @@ export default function App() {
         
         taxData.patrimonyAssets.forEach(asset => {
           report += `${asset.coin}\n`;
-          report += `   Quantidade: ${asset.quantity.toFixed(8)}\n`;
+          report += `   Quantidade: ${formatQuantity(asset.quantity)}\n`;
           report += `   Custo médio: ${formatCurrency(asset.averageCost)}\n`;
           report += `   Valor total: ${formatCurrency(asset.totalCost)}\n`;
           report += `   Código IR: 81 - Criptoativo\n\n`;
@@ -1714,7 +1739,7 @@ export default function App() {
                     <Text style={styles.patrimonyCode}>Código 81 - Criptoativo</Text>
                     <Text style={styles.patrimonyCoin}>{asset.coin}</Text>
                     <Text style={styles.patrimonyQuantity}>
-                      Quantidade: {asset.quantity.toFixed(8)}
+                      Quantidade: {formatQuantity(asset.quantity)}
                     </Text>
                     <Text style={styles.patrimonyCost}>
                       Custo médio: {formatCurrency(asset.averageCost)}
@@ -1914,7 +1939,7 @@ export default function App() {
                   </View>
                   <View style={styles.summaryRow}>
                     <Text style={styles.summaryLabel}>Quantidade:</Text>
-                    <Text style={styles.summaryValue}>{item.totalQuantity.toFixed(8)}</Text>
+                    <Text style={styles.summaryValue}>{formatQuantity(item.totalQuantity)}</Text>
                   </View>
                   <View style={styles.summaryRow}>
                     <Text style={styles.summaryLabel}>Preço Médio:</Text>
@@ -1941,7 +1966,7 @@ export default function App() {
                   </View>
                   <View style={styles.summaryRow}>
                     <Text style={styles.summaryLabel}>Quantidade:</Text>
-                    <Text style={styles.summaryValue}>{item.totalSold.toFixed(8)}</Text>
+                    <Text style={styles.summaryValue}>{formatQuantity(item.totalSold)}</Text>
                   </View>
                   <View style={styles.summaryRow}>
                     <Text style={styles.summaryLabel}>Preço Médio:</Text>
@@ -1982,7 +2007,7 @@ export default function App() {
                 </View>
                 <View style={styles.row}>
                   <Text style={styles.label}>Quantidade:</Text>
-                  <Text style={styles.value}>{item.quantity}</Text>
+                  <Text style={styles.value}>{formatQuantity(item.quantity)}</Text>
                 </View>
                 <View style={styles.row}>
                   <Text style={styles.label}>Valor Pago:</Text>
@@ -1990,7 +2015,7 @@ export default function App() {
                 </View>
                 <View style={styles.row}>
                   <Text style={styles.label}>Preço Unitário:</Text>
-                  <Text style={styles.value}>{formatCurrency(item.pricePerUnit)}</Text>
+                  <Text style={styles.value}>{formatPrice(item.pricePerUnit)}</Text>
                 </View>
                 <View style={styles.row}>
                   <Text style={styles.label}>Cotação Dólar:</Text>
@@ -2042,7 +2067,7 @@ export default function App() {
                 </View>
                 <View style={styles.row}>
                   <Text style={styles.label}>Quantidade:</Text>
-                  <Text style={styles.value}>{item.quantity}</Text>
+                  <Text style={styles.value}>{formatQuantity(item.quantity)}</Text>
                 </View>
                 <View style={styles.row}>
                   <Text style={styles.label}>Valor Recebido:</Text>
@@ -2050,7 +2075,7 @@ export default function App() {
                 </View>
                 <View style={styles.row}>
                   <Text style={styles.label}>Preço Unitário:</Text>
-                  <Text style={styles.value}>{formatCurrency(item.pricePerUnit)}</Text>
+                  <Text style={styles.value}>{formatPrice(item.pricePerUnit)}</Text>
                 </View>
                 <View style={styles.row}>
                   <Text style={styles.label}>Cotação Dólar:</Text>
