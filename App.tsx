@@ -617,6 +617,58 @@ export default function App() {
       });
     });
 
+    // FUNÇÃO: Calcular patrimônio em uma data específica
+    const calculatePatrimonyAtDate = (targetDate: Date) => {
+      const coinPatrimony = new Map<string, { quantity: number; averageCost: number }>();
+      
+      // Processar compras até a data alvo
+      purchases.forEach((p) => {
+        const purchaseDate = new Date(p.date);
+        if (purchaseDate <= targetDate) {
+          const existing = coinPatrimony.get(p.coin) || { quantity: 0, averageCost: 0 };
+          const newQuantity = existing.quantity + p.quantity;
+          
+          if (newQuantity > 0) {
+            const newAverageCost = ((existing.averageCost * existing.quantity) + (p.pricePaid * p.dollarRate)) / newQuantity;
+            coinPatrimony.set(p.coin, { quantity: newQuantity, averageCost: newAverageCost });
+          }
+        }
+      });
+
+      // Processar vendas até a data alvo
+      sales.forEach((s) => {
+        const saleDate = new Date(s.date);
+        if (saleDate <= targetDate) {
+          const existing = coinPatrimony.get(s.coin);
+          if (existing) {
+            coinPatrimony.set(s.coin, {
+              ...existing,
+              quantity: existing.quantity - s.quantity,
+            });
+          }
+        }
+      });
+
+      // Compilar ativos
+      const assets: any[] = [];
+      let total = 0;
+      
+      coinPatrimony.forEach((data, coinName) => {
+        if (data.quantity > 0) {
+          const totalCost = data.quantity * data.averageCost;
+          total += totalCost;
+          assets.push({
+            coin: coinName,
+            quantity: data.quantity,
+            averageCost: data.averageCost,
+            totalCost,
+          });
+        }
+      });
+
+      return { total, assets: assets.sort((a, b) => b.totalCost - a.totalCost) };
+    };
+
     // Calcular patrimônio em 31/12 (usando custo médio)
     const coinPatrimony = new Map<string, { quantity: number; averageCost: number }>();
     
@@ -665,7 +717,7 @@ export default function App() {
     const netProfit = yearlyProfit - yearlyLoss;
     const compensatedTax = netProfit > 0 ? netProfit * 0.15 : 0;
 
-    // NOVO: Agrupar dados por ano fiscal para futura expansão
+    // NOVO: Agrupar dados por ano fiscal com patrimônio calculado
     const yearlyData = new Map<string, any>();
     taxMonths.forEach(month => {
       if (!yearlyData.has(month.year)) {
@@ -685,14 +737,25 @@ export default function App() {
       }
     });
 
-    const fiscalYears = Array.from(yearlyData.values()).map(year => ({
-      ...year,
-      netResult: year.totalProfit - year.totalLoss,
-      taxDue: (year.totalProfit - year.totalLoss) > 0 ? (year.totalProfit - year.totalLoss) * 0.15 : 0,
-      patrimonyStart: 0, // Placeholder para futura implementação
-      patrimonyEnd: totalPatrimony,
-      needsDeclaration: totalPatrimony > 5000 || year.months.length > 0,
-    }));
+    const fiscalYears = Array.from(yearlyData.values()).map(year => {
+      // Calcular patrimônio em 31/12 do ano anterior e do ano atual
+      const startDate = new Date(parseInt(year.year) - 1, 11, 31, 23, 59, 59);
+      const endDate = new Date(parseInt(year.year), 11, 31, 23, 59, 59);
+      
+      const patrimonyStart = calculatePatrimonyAtDate(startDate);
+      const patrimonyEnd = calculatePatrimonyAtDate(endDate);
+      
+      return {
+        ...year,
+        patrimonyStart: patrimonyStart.total,
+        patrimonyEnd: patrimonyEnd.total,
+        patrimonyStartAssets: patrimonyStart.assets,
+        patrimonyEndAssets: patrimonyEnd.assets,
+        netResult: year.totalProfit - year.totalLoss,
+        taxDue: (year.totalProfit - year.totalLoss) > 0 ? (year.totalProfit - year.totalLoss) * 0.15 : 0,
+        needsDeclaration: patrimonyEnd.total > 5000 || year.months.length > 0,
+      };
+    });
 
     return {
       fiscalYears: fiscalYears.sort((a, b) => b.year.localeCompare(a.year)),
