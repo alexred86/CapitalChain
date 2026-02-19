@@ -100,6 +100,8 @@ export default function App() {
   const [purchases, setPurchases] = useState<CryptoPurchase[]>([]);
   const [sales, setSales] = useState<CryptoSale[]>([]);
   const [taxLosses, setTaxLosses] = useState<{[year: string]: number}>({});
+  const [expandedYears, setExpandedYears] = useState<{[year: string]: boolean}>({});
+  const [taxViewMode, setTaxViewMode] = useState<'years' | 'months'>('years');
   const [coin, setCoin] = useState('');
   const [quantity, setQuantity] = useState('');
   const [pricePaid, setPricePaid] = useState('');
@@ -1710,6 +1712,13 @@ export default function App() {
     
     const allClear = taxData.pendingDARFs.length === 0 && (!taxData.needsDeclaration || !isDeclarationPeriod);
 
+    const toggleYear = (year: string) => {
+      setExpandedYears(prev => ({
+        ...prev,
+        [year]: !prev[year]
+      }));
+    };
+
     const exportTaxReport = () => {
       let report = '📊 RELATÓRIO DE IMPOSTOS - CRIPTOMOEDAS 2026\n\n';
       
@@ -1718,72 +1727,54 @@ export default function App() {
       report += '═══════════════════════════════════════\n';
       report += '• 15% sobre QUALQUER ganho de capital\n';
       report += '• SEM isenção de R$ 35.000\n';
-      report += '• Compensação de perdas dentro do ano\n\n';
+      report += '• Compensação de perdas INTERANUAL (indefinida)\n\n';
       
-      if (taxData.netProfit > 0) {
+      if (taxData.fiscalYears && taxData.fiscalYears.length > 0) {
         report += '═══════════════════════════════════════\n';
-        report += '💰 RESULTADO ANUAL\n';
-        report += '═══════════════════════════════════════\n';
-        report += `Lucro Total: ${formatCurrency(taxData.yearlyProfit)}\n`;
-        report += `Prejuízo Total: ${formatCurrency(taxData.yearlyLoss)}\n`;
-        report += `Lucro Líquido: ${formatCurrency(taxData.netProfit)}\n`;
-        report += `\n⚠️ IMPOSTO TOTAL (após compensação): ${formatCurrency(taxData.compensatedTax)}\n\n`;
-      }
-      
-      report += '═══════════════════════════════════════\n';
-      report += 'RESUMO GERAL\n';
-      report += '═══════════════════════════════════════\n\n';
-      
-      if (taxData.taxMonths.length === 0) {
-        report += '✅ Nenhuma operação tributável encontrada\n\n';
-      } else {
-        report += `Total de meses com operações: ${taxData.taxMonths.length}\n`;
-        report += `DARFs pendentes: ${taxData.pendingDARFs.length}\n`;
-        report += `Patrimônio total: ${formatCurrency(taxData.totalPatrimony)}\n\n`;
-        
-        report += '═══════════════════════════════════════\n';
-        report += 'VENDAS MENSAIS\n';
+        report += 'DECLARAÇÃO POR ANO FISCAL\n';
         report += '═══════════════════════════════════════\n\n';
         
-        taxData.taxMonths.forEach(month => {
-          const monthName = new Date(parseInt(month.year), parseInt(month.month) - 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+        taxData.fiscalYears.forEach(year => {
+          report += `\n📅 ANO FISCAL ${year.year}\n`;
+          report += `${'─'.repeat(39)}\n\n`;
           
-          report += `📅 ${monthName.toUpperCase()}\n`;
-          report += `   Vendas: ${formatCurrency(month.sales)}\n`;
-          report += `   Custo: ${formatCurrency(month.cost)}\n`;
-          report += `   ${month.profit >= 0 ? 'Lucro' : 'Prejuízo'}: ${formatCurrency(Math.abs(month.profit))}\n`;
+          report += '📋 BENS E DIREITOS (31/12):\n';
+          report += `   Ano Anterior: ${formatCurrency(year.patrimonyStart)}\n`;
+          report += `   Ano Atual: ${formatCurrency(year.patrimonyEnd)}\n`;
+          report += `   Variação: ${formatCurrency(year.patrimonyEnd - year.patrimonyStart)}\n\n`;
           
-          if (month.profit > 0) {
-            report += `   ⚠️ TRIBUTÁVEL (15% sobre ganho de capital)\n`;
-            report += `   💰 Imposto devido: ${formatCurrency(month.taxDue)}\n`;
-            report += `   📆 Vencimento DARF: ${month.dueDate}\n`;
-            report += `   Status: ${month.isPending ? '⏰ PENDENTE' : '✅ Pago'}\n`;
-          } else if (month.profit < 0) {
-            report += `   ✅ Prejuízo pode compensar lucros no ano\n`;
+          report += '💰 GANHOS DE CAPITAL:\n';
+          report += `   Ganhos: ${formatCurrency(year.totalProfit)}\n`;
+          report += `   Perdas: ${formatCurrency(year.totalLoss)}\n`;
+          report += `   Resultado Bruto: ${formatCurrency(year.netResult)}\n\n`;
+          
+          if (year.accumulatedLoss > 0) {
+            report += '📊 COMPENSAÇÃO:\n';
+            report += `   Prejuízos de anos anteriores: ${formatCurrency(year.accumulatedLoss)}\n`;
+            report += `   Resultado após compensação: ${formatCurrency(year.netResultWithCompensation)}\n\n`;
           }
-          report += '\n';
+          
+          report += '⚠️ IMPOSTO:\n';
+          report += `   Base de cálculo: ${formatCurrency(Math.max(0, year.netResultWithCompensation))}\n`;
+          report += `   Imposto devido (15%): ${formatCurrency(year.taxDue)}\n\n`;
+          
+          if (year.lossToCarry > 0) {
+            report += `📌 Prejuízo a compensar nos próximos anos: ${formatCurrency(year.lossToCarry)}\n\n`;
+          }
+          
+          if (year.needsDeclaration) {
+            report += '✅ DECLARAÇÃO OBRIGATÓRIA\n';
+            if (year.patrimonyEnd > 5000) {
+              report += '   Motivo: Patrimônio > R$ 5.000\n';
+            }
+            if (year.months.length > 0) {
+              report += '   Motivo: Houve operações no ano\n';
+            }
+            report += '\n';
+          }
+          
+          report += `${'═'.repeat(39)}\n`;
         });
-      }
-      
-      if (taxData.patrimonyAssets.length > 0) {
-        report += '═══════════════════════════════════════\n';
-        report += 'BENS E DIREITOS (31/12)\n';
-        report += '═══════════════════════════════════════\n\n';
-        
-        taxData.patrimonyAssets.forEach(asset => {
-          report += `${asset.coin}\n`;
-          report += `   Quantidade: ${formatQuantity(asset.quantity)}\n`;
-          report += `   Custo médio: ${formatCurrency(asset.averageCost)}\n`;
-          report += `   Valor total: ${formatCurrency(asset.totalCost)}\n`;
-          report += `   Código IR: 81 - Criptoativo\n\n`;
-        });
-        
-        report += `TOTAL DO PATRIMÔNIO: ${formatCurrency(taxData.totalPatrimony)}\n\n`;
-        
-        if (taxData.needsDeclaration) {
-          report += '⚠️ DECLARAÇÃO OBRIGATÓRIA\n';
-          report += 'Patrimônio > R$ 5.000 ou houve vendas no ano\n';
-        }
       }
       
       report += '\n═══════════════════════════════════════\n';
@@ -1813,140 +1804,288 @@ export default function App() {
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>💰 Impostos</Text>
-          <Text style={styles.subtitle}>Relatório para Declaração IR 2026</Text>
+          <Text style={styles.subtitle}>Declaração por Ano Fiscal</Text>
         </View>
 
         <ScrollView style={styles.content}>
+          {/* Toggle entre visualização anual e mensal */}
+          <View style={styles.viewModeToggle}>
+            <TouchableOpacity
+              style={[styles.toggleButton, taxViewMode === 'years' && styles.toggleButtonActive]}
+              onPress={() => setTaxViewMode('years')}
+            >
+              <Text style={[styles.toggleButtonText, taxViewMode === 'years' && styles.toggleButtonTextActive]}>
+                📅 Por Ano Fiscal
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.toggleButton, taxViewMode === 'months' && styles.toggleButtonActive]}
+              onPress={() => setTaxViewMode('months')}
+            >
+              <Text style={[styles.toggleButtonText, taxViewMode === 'months' && styles.toggleButtonTextActive]}>
+                📆 Por Mês
+              </Text>
+            </TouchableOpacity>
+          </View>
+
           <View style={styles.taxCardBlue}>
             <Text style={styles.taxCardTitle}>🌍 Nova Lei 2026 - Exchanges Internacionais</Text>
             <Text style={styles.taxCardText}>
               • 15% sobre QUALQUER ganho de capital{"\n"}
               • SEM isenção de R$ 35.000{"\n"}
-              • Compensação de perdas dentro do ano
+              • Compensação de perdas INTERANUAL (indefinida)
             </Text>
           </View>
 
-          {taxData.netProfit > 0 && (
-            <View style={styles.taxCardOrange}>
-              <Text style={styles.taxCardTitle}>💰 Resultado Anual</Text>
-              <Text style={styles.taxCardText}>
-                Lucro: {formatCurrency(taxData.yearlyProfit)}{"\n"}
-                Prejuízo: {formatCurrency(taxData.yearlyLoss)}{"\n"}
-                Lucro Líquido: {formatCurrency(taxData.netProfit)}{"\n"}
-                {"\n"}
-                <Text style={{ fontWeight: 'bold', fontSize: 16 }}>
-                  Imposto Total: {formatCurrency(taxData.compensatedTax)}
-                </Text>
-              </Text>
-            </View>
-          )}
-
-          {allClear ? (
-            <View style={styles.taxCardGreen}>
-              <Text style={styles.taxCardTitle}>✅ Tudo em ordem!</Text>
-              <Text style={styles.taxCardText}>
-                Você não possui DARFs pendentes no momento.
-              </Text>
-              {!taxData.needsDeclaration && (
-                <Text style={styles.taxCardText}>
-                  Seu patrimônio está abaixo de R$ 5.000 e você não realizou vendas, portanto não é necessário declarar.
-                </Text>
-              )}
-              {taxData.needsDeclaration && !isDeclarationPeriod && (
-                <Text style={styles.taxCardText}>
-                  Você precisará declarar na próxima temporada (jan-abr).
-                </Text>
-              )}
-            </View>
-          ) : (
-            <View>
-              {taxData.pendingDARFs.length > 0 && (
-                <View style={styles.taxCardRed}>
-                  <Text style={styles.taxCardTitle}>⚠️ DARFs Pendentes</Text>
-                  <Text style={styles.taxCardText}>
-                    Você possui {taxData.pendingDARFs.length} DARF(s) a pagar:
-                  </Text>
-                  {taxData.pendingDARFs.map((month, index) => {
-                    const [year, monthNum] = month.monthKey.split('-');
-                    const monthName = new Date(parseInt(year), parseInt(monthNum) - 1)
-                      .toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-                    
-                    return (
-                      <View key={index} style={styles.darfItem}>
-                        <Text style={styles.darfMonth}>📅 {monthName}</Text>
-                        <Text style={styles.darfAmount}>Imposto: {formatCurrency(month.taxDue)}</Text>
-                        <Text style={styles.darfDue}>
-                          Vencimento: {new Date(month.dueDate).toLocaleDateString('pt-BR')}
-                        </Text>
-                        <Text style={styles.darfProfit}>
-                          Lucro: {formatCurrency(month.totalProfit)} | Vendas: {formatCurrency(month.totalSales)}
-                        </Text>
-                      </View>
-                    );
-                  })}
-                </View>
-              )}
-
-              {taxData.needsDeclaration && isDeclarationPeriod && (
-                <View style={styles.taxCardYellow}>
-                  <Text style={styles.taxCardTitle}>📋 Período de Declaração</Text>
-                  <Text style={styles.taxCardText}>
-                    Estamos no período de declaração do IR (janeiro a abril).
-                  </Text>
-                  <Text style={styles.taxCardText}>
-                    Seu patrimônio em 31/12: {formatCurrency(taxData.totalPatrimony)}
-                  </Text>
-                  {taxData.totalPatrimony > 5000 && (
-                    <Text style={styles.taxCardText}>
-                      ⚠️ Obrigatório declarar (patrimônio {'>'} R$ 5.000)
-                    </Text>
-                  )}
-                  {sales.length > 0 && (
-                    <Text style={styles.taxCardText}>
-                      ⚠️ Obrigatório declarar (houve vendas no ano)
-                    </Text>
-                  )}
-                </View>
-              )}
-            </View>
-          )}
-
-          {taxData.taxMonths.length > 0 && (
+          {/* VISUALIZAÇÃO POR ANO FISCAL */}
+          {taxViewMode === 'years' && taxData.fiscalYears && taxData.fiscalYears.length > 0 && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>📊 Vendas Mensais</Text>
-              {taxData.taxMonths.map((month, index) => {
-                const monthName = new Date(parseInt(month.year), parseInt(month.month) - 1)
-                  .toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+              <Text style={styles.sectionTitle}>📅 Declaração por Ano Fiscal</Text>
+              <Text style={styles.sectionSubtitle}>
+                Toque em cada ano para ver os detalhes
+              </Text>
+              
+              {taxData.fiscalYears.map((year, index) => {
+                const isExpanded = expandedYears[year.year];
+                const hasProfit = year.netResultWithCompensation > 0;
+                const hasLoss = year.netResult < 0;
+                const hadCompensation = year.accumulatedLoss > 0;
                 
                 return (
-                  <View key={index} style={month.isTaxable ? styles.taxMonthCardTaxable : styles.taxMonthCard}>
-                    <Text style={styles.taxMonthTitle}>{monthName}</Text>
-                    <View style={styles.taxMonthDetails}>
-                      <Text style={styles.taxMonthLabel}>Vendas:</Text>
-                      <Text style={styles.taxMonthValue}>{formatCurrency(month.sales)}</Text>
-                    </View>
-                    <View style={styles.taxMonthDetails}>
-                      <Text style={styles.taxMonthLabel}>Custo:</Text>
-                      <Text style={styles.taxMonthValue}>{formatCurrency(month.cost)}</Text>
-                    </View>
-                    <View style={styles.taxMonthDetails}>
-                      <Text style={styles.taxMonthLabel}>Lucro:</Text>
-                      <Text style={[styles.taxMonthValue, month.profit > 0 ? styles.profitPositive : styles.profitNegative]}>
-                        {formatCurrency(month.profit)}
-                      </Text>
-                    </View>
-                    {month.profit > 0 ? (
-                      <View style={styles.taxDueContainer}>
-                        <Text style={styles.taxDueLabel}>💰 Imposto devido (15%):</Text>
-                        <Text style={styles.taxDueAmount}>{formatCurrency(month.taxDue)}</Text>
-                        <Text style={styles.taxDueDate}>
-                          Venc: {month.dueDate}
-                        </Text>
+                  <View key={year.year}>
+                    <TouchableOpacity
+                      style={[
+                        styles.fiscalYearCard,
+                        year.taxDue > 0 && styles.fiscalYearCardTax,
+                        hasLoss && styles.fiscalYearCardLoss,
+                      ]}
+                      onPress={() => toggleYear(year.year)}
+                    >
+                      <View style={styles.fiscalYearHeader}>
+                        <View style={styles.fiscalYearTitleRow}>
+                          <Text style={styles.fiscalYearTitle}>
+                            📅 Ano Fiscal {year.year}
+                          </Text>
+                          <Text style={styles.fiscalYearToggle}>
+                            {isExpanded ? '▼' : '▶'}
+                          </Text>
+                        </View>
+                        
+                        <View style={styles.fiscalYearSummary}>
+                          <View style={styles.fiscalYearSummaryRow}>
+                            <Text style={styles.fiscalYearLabel}>Patrimônio 31/12:</Text>
+                            <Text style={styles.fiscalYearValue}>
+                              {formatCurrency(year.patrimonyEnd)}
+                            </Text>
+                          </View>
+                          
+                          <View style={styles.fiscalYearSummaryRow}>
+                            <Text style={styles.fiscalYearLabel}>Resultado:</Text>
+                            <Text style={[
+                              styles.fiscalYearValueHighlight,
+                              year.netResult >= 0 ? styles.profit : styles.loss
+                            ]}>
+                              {formatCurrency(year.netResult)}
+                            </Text>
+                          </View>
+                          
+                          {hadCompensation && (
+                            <View style={styles.fiscalYearSummaryRow}>
+                              <Text style={styles.fiscalYearLabel}>Após compensação:</Text>
+                              <Text style={[
+                                styles.fiscalYearValueHighlight,
+                                year.netResultWithCompensation >= 0 ? styles.profit : styles.loss
+                              ]}>
+                                {formatCurrency(year.netResultWithCompensation)}
+                              </Text>
+                            </View>
+                          )}
+                          
+                          <View style={styles.fiscalYearSummaryRow}>
+                            <Text style={styles.fiscalYearLabelBold}>Imposto devido:</Text>
+                            <Text style={styles.fiscalYearTaxDue}>
+                              {formatCurrency(year.taxDue)}
+                            </Text>
+                          </View>
+                        </View>
                       </View>
-                    ) : month.profit < 0 ? (
-                      <Text style={styles.taxExempt}>✅ Prejuízo pode compensar lucros no ano</Text>
-                    ) : (
-                      <Text style={styles.taxExempt}>➖ Sem lucro ou prejuízo</Text>
+                    </TouchableOpacity>
+                    
+                    {/* DETALHES DO ANO (EXPANDIDO) */}
+                    {isExpanded && (
+                      <View style={styles.fiscalYearDetails}>
+                        {/* Bens e Direitos */}
+                        <View style={styles.detailSection}>
+                          <Text style={styles.detailSectionTitle}>📋 Bens e Direitos (31/12)</Text>
+                          <View style={styles.detailRow}>
+                            <Text style={styles.detailLabel}>Ano Anterior ({parseInt(year.year) - 1}):</Text>
+                            <Text style={styles.detailValue}>{formatCurrency(year.patrimonyStart)}</Text>
+                          </View>
+                          <View style={styles.detailRow}>
+                            <Text style={styles.detailLabel}>Ano Atual ({year.year}):</Text>
+                            <Text style={styles.detailValue}>{formatCurrency(year.patrimonyEnd)}</Text>
+                          </View>
+                          <View style={styles.detailRow}>
+                            <Text style={styles.detailLabelBold}>Variação:</Text>
+                            <Text style={[
+                              styles.detailValueBold,
+                              (year.patrimonyEnd - year.patrimonyStart) >= 0 ? styles.profit : styles.loss
+                            ]}>
+                              {formatCurrency(year.patrimonyEnd - year.patrimonyStart)}
+                            </Text>
+                          </View>
+                          
+                          {/* Ativos detalhados */}
+                          {year.patrimonyEndAssets && year.patrimonyEndAssets.length > 0 && (
+                            <View style={styles.assetsDetail}>
+                              <Text style={styles.assetsDetailTitle}>Criptoativos em 31/12/{year.year}:</Text>
+                              {year.patrimonyEndAssets.map((asset: any, idx: number) => (
+                                <View key={idx} style={styles.assetItem}>
+                                  <Text style={styles.assetCoin}>{asset.coin}</Text>
+                                  <Text style={styles.assetQuantity}>
+                                    Qtd: {formatQuantity(asset.quantity)}
+                                  </Text>
+                                  <Text style={styles.assetCost}>
+                                    Custo médio: {formatCurrency(asset.averageCost)}
+                                  </Text>
+                                  <Text style={styles.assetTotal}>
+                                    Total: {formatCurrency(asset.totalCost)}
+                                  </Text>
+                                </View>
+                              ))}
+                            </View>
+                          )}
+                        </View>
+                        
+                        {/* Ganhos de Capital */}
+                        <View style={styles.detailSection}>
+                          <Text style={styles.detailSectionTitle}>💰 Ganhos de Capital</Text>
+                          <View style={styles.detailRow}>
+                            <Text style={styles.detailLabel}>Ganhos:</Text>
+                            <Text style={[styles.detailValue, styles.profit]}>
+                              {formatCurrency(year.totalProfit)}
+                            </Text>
+                          </View>
+                          <View style={styles.detailRow}>
+                            <Text style={styles.detailLabel}>Perdas:</Text>
+                            <Text style={[styles.detailValue, styles.loss]}>
+                              {formatCurrency(year.totalLoss)}
+                            </Text>
+                          </View>
+                          <View style={styles.detailRow}>
+                            <Text style={styles.detailLabelBold}>Resultado Bruto:</Text>
+                            <Text style={[
+                              styles.detailValueBold,
+                              year.netResult >= 0 ? styles.profit : styles.loss
+                            ]}>
+                              {formatCurrency(year.netResult)}
+                            </Text>
+                          </View>
+                        </View>
+                        
+                        {/* Compensação de Prejuízos */}
+                        {hadCompensation && (
+                          <View style={[styles.detailSection, styles.compensationSection]}>
+                            <Text style={styles.detailSectionTitle}>📊 Compensação de Prejuízos</Text>
+                            <View style={styles.detailRow}>
+                              <Text style={styles.detailLabel}>Prejuízos de anos anteriores:</Text>
+                              <Text style={[styles.detailValue, styles.loss]}>
+                                {formatCurrency(year.accumulatedLoss)}
+                              </Text>
+                            </View>
+                            <View style={styles.detailRow}>
+                              <Text style={styles.detailLabelBold}>Resultado após compensação:</Text>
+                              <Text style={[
+                                styles.detailValueBold,
+                                year.netResultWithCompensation >= 0 ? styles.profit : styles.loss
+                              ]}>
+                                {formatCurrency(year.netResultWithCompensation)}
+                              </Text>
+                            </View>
+                          </View>
+                        )}
+                        
+                        {/* Imposto */}
+                        <View style={[styles.detailSection, styles.taxSection]}>
+                          <Text style={styles.detailSectionTitle}>⚠️ Imposto sobre Ganhos de Capital</Text>
+                          <View style={styles.detailRow}>
+                            <Text style={styles.detailLabel}>Base de cálculo (15%):</Text>
+                            <Text style={styles.detailValue}>
+                              {formatCurrency(Math.max(0, year.netResultWithCompensation))}
+                            </Text>
+                          </View>
+                          <View style={styles.detailRow}>
+                            <Text style={styles.detailLabelBold}>Imposto Devido:</Text>
+                            <Text style={styles.taxDueBig}>
+                              {formatCurrency(year.taxDue)}
+                            </Text>
+                          </View>
+                        </View>
+                        
+                        {/* Prejuízo a Compensar */}
+                        {year.lossToCarry > 0 && (
+                          <View style={[styles.detailSection, styles.lossCarrySection]}>
+                            <Text style={styles.detailSectionTitle}>📌 Prejuízo para Anos Futuros</Text>
+                            <Text style={styles.lossCarryText}>
+                              Este prejuízo pode ser usado para compensar ganhos em anos futuros (sem prazo limite):
+                            </Text>
+                            <Text style={styles.lossCarryAmount}>
+                              {formatCurrency(year.lossToCarry)}
+                            </Text>
+                          </View>
+                        )}
+                        
+                        {/* Declaração */}
+                        {year.needsDeclaration && (
+                          <View style={[styles.detailSection, styles.declarationSection]}>
+                            <Text style={styles.detailSectionTitle}>✅ Declaração Obrigatória</Text>
+                            {year.patrimonyEnd > 5000 && (
+                              <Text style={styles.declarationReason}>
+                                • Patrimônio em 31/12 superior a R$ 5.000
+                              </Text>
+                            )}
+                            {year.months.length > 0 && (
+                              <Text style={styles.declarationReason}>
+                                • Houve {year.months.length} operação(ões) no ano
+                              </Text>
+                            )}
+                          </View>
+                        )}
+                        
+                        {/* Detalhamento Mensal */}
+                        {year.months && year.months.length > 0 && (
+                          <View style={styles.detailSection}>
+                            <Text style={styles.detailSectionTitle}>📆 Detalhamento Mensal</Text>
+                            {year.months.map((month: any, idx: number) => {
+                              const monthName = new Date(parseInt(month.year), parseInt(month.month) - 1)
+                                .toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+                              
+                              return (
+                                <View key={idx} style={styles.monthDetailCard}>
+                                  <Text style={styles.monthDetailName}>{monthName}</Text>
+                                  <View style={styles.monthDetailRow}>
+                                    <Text style={styles.monthDetailLabel}>Vendas:</Text>
+                                    <Text style={styles.monthDetailValue}>{formatCurrency(month.sales)}</Text>
+                                  </View>
+                                  <View style={styles.monthDetailRow}>
+                                    <Text style={styles.monthDetailLabel}>Custo:</Text>
+                                    <Text style={styles.monthDetailValue}>{formatCurrency(month.cost)}</Text>
+                                  </View>
+                                  <View style={styles.monthDetailRow}>
+                                    <Text style={styles.monthDetailLabel}>Resultado:</Text>
+                                    <Text style={[
+                                      styles.monthDetailValue,
+                                      month.profit >= 0 ? styles.profit : styles.loss
+                                    ]}>
+                                      {formatCurrency(month.profit)}
+                                    </Text>
+                                  </View>
+                                </View>
+                              );
+                            })}
+                          </View>
+                        )}
+                      </View>
                     )}
                   </View>
                 );
@@ -1954,33 +2093,167 @@ export default function App() {
             </View>
           )}
 
-          {taxData.patrimonyAssets.length > 0 && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>📦 Bens e Direitos (31/12)</Text>
-              <View style={styles.patrimonyCard}>
-                <Text style={styles.patrimonyTotal}>
-                  Total: {formatCurrency(taxData.totalPatrimony)}
-                </Text>
-                {taxData.patrimonyAssets.map((asset, index) => (
-                  <View key={index} style={styles.patrimonyItem}>
-                    <Text style={styles.patrimonyCode}>Código 81 - Criptoativo</Text>
-                    <Text style={styles.patrimonyCoin}>{asset.coin}</Text>
-                    <Text style={styles.patrimonyQuantity}>
-                      Quantidade: {formatQuantity(asset.quantity)}
+          {/* VISUALIZAÇÃO POR MÊS (ORIGINAL) */}
+          {taxViewMode === 'months' && (
+            <View>
+              {taxData.netProfit > 0 && (
+                <View style={styles.taxCardOrange}>
+                  <Text style={styles.taxCardTitle}>💰 Resultado Anual</Text>
+                  <Text style={styles.taxCardText}>
+                    Lucro: {formatCurrency(taxData.yearlyProfit)}{"\n"}
+                    Prejuízo: {formatCurrency(taxData.yearlyLoss)}{"\n"}
+                    Lucro Líquido: {formatCurrency(taxData.netProfit)}{"\n"}
+                    {"\n"}
+                    <Text style={{ fontWeight: 'bold', fontSize: 16 }}>
+                      Imposto Total: {formatCurrency(taxData.compensatedTax)}
                     </Text>
-                    <Text style={styles.patrimonyCost}>
-                      Custo médio: {formatCurrency(asset.averageCost)}
+                  </Text>
+                </View>
+              )}
+
+              {allClear ? (
+                <View style={styles.taxCardGreen}>
+                  <Text style={styles.taxCardTitle}>✅ Tudo em ordem!</Text>
+                  <Text style={styles.taxCardText}>
+                    Você não possui DARFs pendentes no momento.
+                  </Text>
+                  {!taxData.needsDeclaration && (
+                    <Text style={styles.taxCardText}>
+                      Seu patrimônio está abaixo de R$ 5.000 e você não realizou vendas, portanto não é necessário declarar.
                     </Text>
-                    <Text style={styles.patrimonyValue}>
-                      Valor: {formatCurrency(asset.totalCost)}
+                  )}
+                  {taxData.needsDeclaration && !isDeclarationPeriod && (
+                    <Text style={styles.taxCardText}>
+                      Você precisará declarar na próxima temporada (jan-abr).
                     </Text>
+                  )}
+                </View>
+              ) : (
+                <View>
+                  {taxData.pendingDARFs.length > 0 && (
+                    <View style={styles.taxCardRed}>
+                      <Text style={styles.taxCardTitle}>⚠️ DARFs Pendentes</Text>
+                      <Text style={styles.taxCardText}>
+                        Você possui {taxData.pendingDARFs.length} DARF(s) a pagar:
+                      </Text>
+                      {taxData.pendingDARFs.map((month, index) => {
+                        const [year, monthNum] = month.monthKey.split('-');
+                        const monthName = new Date(parseInt(year), parseInt(monthNum) - 1)
+                          .toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+                        
+                        return (
+                          <View key={index} style={styles.darfItem}>
+                            <Text style={styles.darfMonth}>📅 {monthName}</Text>
+                            <Text style={styles.darfAmount}>Imposto: {formatCurrency(month.taxDue)}</Text>
+                            <Text style={styles.darfDue}>
+                              Vencimento: {new Date(month.dueDate).toLocaleDateString('pt-BR')}
+                            </Text>
+                            <Text style={styles.darfProfit}>
+                              Lucro: {formatCurrency(month.totalProfit)} | Vendas: {formatCurrency(month.totalSales)}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
+
+                  {taxData.needsDeclaration && isDeclarationPeriod && (
+                    <View style={styles.taxCardYellow}>
+                      <Text style={styles.taxCardTitle}>📋 Período de Declaração</Text>
+                      <Text style={styles.taxCardText}>
+                        Estamos no período de declaração do IR (janeiro a abril).
+                      </Text>
+                      <Text style={styles.taxCardText}>
+                        Seu patrimônio em 31/12: {formatCurrency(taxData.totalPatrimony)}
+                      </Text>
+                      {taxData.totalPatrimony > 5000 && (
+                        <Text style={styles.taxCardText}>
+                          ⚠️ Obrigatório declarar (patrimônio {'>'} R$ 5.000)
+                        </Text>
+                      )}
+                      {sales.length > 0 && (
+                        <Text style={styles.taxCardText}>
+                          ⚠️ Obrigatório declarar (houve vendas no ano)
+                        </Text>
+                      )}
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {taxData.taxMonths.length > 0 && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>📊 Vendas Mensais</Text>
+                  {taxData.taxMonths.map((month, index) => {
+                    const monthName = new Date(parseInt(month.year), parseInt(month.month) - 1)
+                      .toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+                    
+                    return (
+                      <View key={index} style={month.isTaxable ? styles.taxMonthCardTaxable : styles.taxMonthCard}>
+                        <Text style={styles.taxMonthTitle}>{monthName}</Text>
+                        <View style={styles.taxMonthDetails}>
+                          <Text style={styles.taxMonthLabel}>Vendas:</Text>
+                          <Text style={styles.taxMonthValue}>{formatCurrency(month.sales)}</Text>
+                        </View>
+                        <View style={styles.taxMonthDetails}>
+                          <Text style={styles.taxMonthLabel}>Custo:</Text>
+                          <Text style={styles.taxMonthValue}>{formatCurrency(month.cost)}</Text>
+                        </View>
+                        <View style={styles.taxMonthDetails}>
+                          <Text style={styles.taxMonthLabel}>Lucro:</Text>
+                          <Text style={[styles.taxMonthValue, month.profit > 0 ? styles.profitPositive : styles.profitNegative]}>
+                            {formatCurrency(month.profit)}
+                          </Text>
+                        </View>
+                        {month.profit > 0 ? (
+                          <View style={styles.taxDueContainer}>
+                            <Text style={styles.taxDueLabel}>💰 Imposto devido (15%):</Text>
+                            <Text style={styles.taxDueAmount}>{formatCurrency(month.taxDue)}</Text>
+                            <Text style={styles.taxDueDate}>
+                              Venc: {month.dueDate}
+                            </Text>
+                          </View>
+                        ) : month.profit < 0 ? (
+                          <Text style={styles.taxExempt}>✅ Prejuízo pode compensar lucros no ano</Text>
+                        ) : (
+                          <Text style={styles.taxExempt}>➖ Sem lucro ou prejuízo</Text>
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+
+              {taxData.patrimonyAssets.length > 0 && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>📦 Bens e Direitos (31/12)</Text>
+                  <View style={styles.patrimonyCard}>
+                    <Text style={styles.patrimonyTotal}>
+                      Total: {formatCurrency(taxData.totalPatrimony)}
+                    </Text>
+                    {taxData.patrimonyAssets.map((asset, index) => (
+                      <View key={index} style={styles.patrimonyItem}>
+                        <Text style={styles.patrimonyCode}>Código 81 - Criptoativo</Text>
+                        <Text style={styles.patrimonyCoin}>{asset.coin}</Text>
+                        <Text style={styles.patrimonyQuantity}>
+                          Quantidade: {formatQuantity(asset.quantity)}
+                        </Text>
+                        <Text style={styles.patrimonyCost}>
+                          Custo médio: {formatCurrency(asset.averageCost)}
+                        </Text>
+                        <Text style={styles.patrimonyValue}>
+                          Valor: {formatCurrency(asset.totalCost)}
+                        </Text>
+                      </View>
+                    ))}
                   </View>
-                ))}
-              </View>
+                </View>
+              )}
             </View>
           )}
 
-          {(taxData.taxMonths.length > 0 || taxData.patrimonyAssets.length > 0) && (
+          {/* Exportar Relatório */}
+          {(taxData.fiscalYears?.length > 0 || taxData.taxMonths.length > 0 || taxData.patrimonyAssets.length > 0) && (
             <View style={styles.exportSection}>
               <Text style={styles.exportTitle}>📤 Exportar Relatório</Text>
               <TouchableOpacity style={styles.exportButton} onPress={shareReport}>
@@ -1995,7 +2268,12 @@ export default function App() {
           <View style={styles.taxInfo}>
             <Text style={styles.taxInfoTitle}>ℹ️ Informações Importantes</Text>
             <Text style={styles.taxInfoText}>
-              • Vendas até R$ 35.000/mês são isentas de imposto
+              • Exchanges Internacionais: 15% sobre QUALQUER ganho
+            </Text>
+            <Text style={styles.taxInfoText}>
+              • Prejuízos podem ser compensados indefinidamente
+            </Text>
+            <Text style={styles.taxInfoText}>
             </Text>
             <Text style={styles.taxInfoText}>
               • Acima desse valor: 15% sobre o lucro
@@ -3765,5 +4043,265 @@ const styles = StyleSheet.create({
     color: '#666',
     marginBottom: 5,
     lineHeight: 18,
+  },
+  viewModeToggle: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 4,
+    marginBottom: 15,
+  },
+  toggleButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    alignItems: 'center',
+  },
+  toggleButtonActive: {
+    backgroundColor: '#6200ea',
+  },
+  toggleButtonText: {
+    fontSize: 13,
+    color: '#666',
+    fontWeight: '600',
+  },
+  toggleButtonTextActive: {
+    color: '#fff',
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    color: '#999',
+    marginBottom: 15,
+    fontStyle: 'italic',
+  },
+  fiscalYearCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 15,
+    borderWidth: 2,
+    borderColor: '#e0e0e0',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  fiscalYearCardTax: {
+    borderColor: '#ff9800',
+    backgroundColor: '#fff8e1',
+  },
+  fiscalYearCardLoss: {
+    borderColor: '#f44336',
+    backgroundColor: '#ffebee',
+  },
+  fiscalYearHeader: {
+    marginBottom: 0,
+  },
+  fiscalYearTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  fiscalYearTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#6200ea',
+  },
+  fiscalYearToggle: {
+    fontSize: 18,
+    color: '#6200ea',
+  },
+  fiscalYearSummary: {
+    gap: 8,
+  },
+  fiscalYearSummaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  fiscalYearLabel: {
+    fontSize: 14,
+    color: '#666',
+  },
+  fiscalYearLabelBold: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  fiscalYearValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+  },
+  fiscalYearValueHighlight: {
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  fiscalYearTaxDue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#f44336',
+  },
+  fiscalYearDetails: {
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    padding: 15,
+    marginTop: 10,
+    marginBottom: 5,
+  },
+  detailSection: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+  },
+  compensationSection: {
+    backgroundColor: '#fff3e0',
+    borderLeftWidth: 4,
+    borderLeftColor: '#ff9800',
+  },
+  taxSection: {
+    backgroundColor: '#ffebee',
+    borderLeftWidth: 4,
+    borderLeftColor: '#f44336',
+  },
+  lossCarrySection: {
+    backgroundColor: '#e8f5e9',
+    borderLeftWidth: 4,
+    borderLeftColor: '#4caf50',
+  },
+  declarationSection: {
+    backgroundColor: '#e3f2fd',
+    borderLeftWidth: 4,
+    borderLeftColor: '#2196f3',
+  },
+  detailSectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 10,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  detailLabel: {
+    fontSize: 13,
+    color: '#666',
+    flex: 1,
+  },
+  detailLabelBold: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#333',
+    flex: 1,
+  },
+  detailValue: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#333',
+    textAlign: 'right',
+  },
+  detailValueBold: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    textAlign: 'right',
+  },
+  taxDueBig: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#f44336',
+    textAlign: 'right',
+  },
+  lossCarryText: {
+    fontSize: 13,
+    color: '#666',
+    marginBottom: 8,
+    lineHeight: 18,
+  },
+  lossCarryAmount: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#4caf50',
+    textAlign: 'center',
+  },
+  declarationReason: {
+    fontSize: 13,
+    color: '#666',
+    marginBottom: 5,
+    lineHeight: 18,
+  },
+  assetsDetail: {
+    marginTop: 12,
+    padding: 10,
+    backgroundColor: '#f9f9f9',
+    borderRadius: 6,
+  },
+  assetsDetailTitle: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#6200ea',
+    marginBottom: 8,
+  },
+  assetItem: {
+    backgroundColor: '#fff',
+    padding: 10,
+    borderRadius: 6,
+    marginBottom: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#6200ea',
+  },
+  assetCoin: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 4,
+  },
+  assetQuantity: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 2,
+  },
+  assetCost: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 2,
+  },
+  assetTotal: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#4caf50',
+  },
+  monthDetailCard: {
+    backgroundColor: '#f9f9f9',
+    padding: 10,
+    borderRadius: 6,
+    marginBottom: 8,
+  },
+  monthDetailName: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#6200ea',
+    marginBottom: 6,
+    textTransform: 'capitalize',
+  },
+  monthDetailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 3,
+  },
+  monthDetailLabel: {
+    fontSize: 12,
+    color: '#666',
+  },
+  monthDetailValue: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#333',
   },
 });
