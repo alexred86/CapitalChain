@@ -1737,69 +1737,6 @@ export default function App() {
       
       return report;
     };
-      
-      report += '═══════════════════════════════════════\n';
-      report += 'RESUMO GERAL\n';
-      report += '═══════════════════════════════════════\n\n';
-      
-      if (taxData.taxMonths.length === 0) {
-        report += '✅ Nenhuma operação tributável encontrada\n\n';
-      } else {
-        report += `Total de meses com operações: ${taxData.taxMonths.length}\n`;
-        report += `DARFs pendentes: ${taxData.pendingDARFs.length}\n`;
-        report += `Patrimônio total: ${formatCurrency(taxData.totalPatrimony)}\n\n`;
-        
-        report += '═══════════════════════════════════════\n';
-        report += 'VENDAS MENSAIS\n';
-        report += '═══════════════════════════════════════\n\n';
-        
-        taxData.taxMonths.forEach(month => {
-          const monthName = new Date(parseInt(month.year), parseInt(month.month) - 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-          
-          report += `📅 ${monthName.toUpperCase()}\n`;
-          report += `   Vendas: ${formatCurrency(month.sales)}\n`;
-          report += `   Custo: ${formatCurrency(month.cost)}\n`;
-          report += `   ${month.profit >= 0 ? 'Lucro' : 'Prejuízo'}: ${formatCurrency(Math.abs(month.profit))}\n`;
-          
-          if (month.profit > 0) {
-            report += `   ⚠️ TRIBUTÁVEL (15% sobre ganho de capital)\n`;
-            report += `   💰 Imposto devido: ${formatCurrency(month.taxDue)}\n`;
-            report += `   📆 Vencimento DARF: ${month.dueDate}\n`;
-            report += `   Status: ${month.isPending ? '⏰ PENDENTE' : '✅ Pago'}\n`;
-          } else if (month.profit < 0) {
-            report += `   ✅ Prejuízo pode compensar lucros no ano\n`;
-          }
-          report += '\n';
-        });
-      }
-      
-      if (taxData.patrimonyAssets.length > 0) {
-        report += '═══════════════════════════════════════\n';
-        report += 'BENS E DIREITOS (31/12)\n';
-        report += '═══════════════════════════════════════\n\n';
-        
-        taxData.patrimonyAssets.forEach(asset => {
-          report += `${asset.coin}\n`;
-          report += `   Quantidade: ${formatQuantity(asset.quantity)}\n`;
-          report += `   Custo médio: ${formatCurrency(asset.averageCost)}\n`;
-          report += `   Valor total: ${formatCurrency(asset.totalCost)}\n`;
-          report += `   Código IR: 81 - Criptoativo\n\n`;
-        });
-        
-        report += `TOTAL DO PATRIMÔNIO: ${formatCurrency(taxData.totalPatrimony)}\n\n`;
-        
-        if (taxData.needsDeclaration) {
-          report += '⚠️ DECLARAÇÃO OBRIGATÓRIA\n';
-          report += 'Patrimônio > R$ 5.000 ou houve vendas no ano\n';
-        }
-      }
-      
-      report += '\n═══════════════════════════════════════\n';
-      report += 'Relatório gerado em: ' + new Date().toLocaleDateString('pt-BR') + '\n';
-      report += 'CapitalChain - Gestor de Criptomoedas\n';
-      
-      return report;
-    };
 
     const shareReport = async () => {
       try {
@@ -1813,7 +1750,7 @@ export default function App() {
     };
 
     const copyReport = async () => {
-      await Clipboard.setStringAsync(exportTaxReport());
+      await Clipboard.setString(exportTaxReport());
       Alert.alert('✅ Copiado!', 'Relatório copiado para a área de transferência');
     };
 
@@ -1964,201 +1901,6 @@ export default function App() {
               </TouchableOpacity>
             </View>
           )}
-            <Text style={styles.taxCardTitle}>🌍 Nova Lei 2026 - Exchanges Internacionais</Text>
-            <Text style={styles.taxCardText}>
-              • 15% sobre QUALQUER ganho de capital{"\n"}
-              • SEM isenção de R$ 35.000{"\n"}
-              • Compensação de perdas dentro do ano
-            </Text>
-          </View>
-
-          {taxData.netProfit > 0 && (
-            <View style={styles.taxCardOrange}>
-              <Text style={styles.taxCardTitle}>💰 Resultado Anual</Text>
-              <Text style={styles.taxCardText}>
-                Lucro: {formatCurrency(taxData.yearlyProfit)}{"\n"}
-                Prejuízo: {formatCurrency(taxData.yearlyLoss)}{"\n"}
-                Lucro Líquido: {formatCurrency(taxData.netProfit)}{"\n"}
-                {"\n"}
-                <Text style={{ fontWeight: 'bold', fontSize: 16 }}>
-                  Imposto Total: {formatCurrency(taxData.compensatedTax)}
-                </Text>
-              </Text>
-            </View>
-          )}
-
-          {allClear ? (
-            <View style={styles.taxCardGreen}>
-              <Text style={styles.taxCardTitle}>✅ Tudo em ordem!</Text>
-              <Text style={styles.taxCardText}>
-                Você não possui DARFs pendentes no momento.
-              </Text>
-              {!taxData.needsDeclaration && (
-                <Text style={styles.taxCardText}>
-                  Seu patrimônio está abaixo de R$ 5.000 e você não realizou vendas, portanto não é necessário declarar.
-                </Text>
-              )}
-              {taxData.needsDeclaration && !isDeclarationPeriod && (
-                <Text style={styles.taxCardText}>
-                  Você precisará declarar na próxima temporada (jan-abr).
-                </Text>
-              )}
-            </View>
-          ) : (
-            <View>
-              {taxData.pendingDARFs.length > 0 && (
-                <View style={styles.taxCardRed}>
-                  <Text style={styles.taxCardTitle}>⚠️ DARFs Pendentes</Text>
-                  <Text style={styles.taxCardText}>
-                    Você possui {taxData.pendingDARFs.length} DARF(s) a pagar:
-                  </Text>
-                  {taxData.pendingDARFs.map((month, index) => {
-                    const [year, monthNum] = month.monthKey.split('-');
-                    const monthName = new Date(parseInt(year), parseInt(monthNum) - 1)
-                      .toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-                    
-                    return (
-                      <View key={index} style={styles.darfItem}>
-                        <Text style={styles.darfMonth}>📅 {monthName}</Text>
-                        <Text style={styles.darfAmount}>Imposto: {formatCurrency(month.taxDue)}</Text>
-                        <Text style={styles.darfDue}>
-                          Vencimento: {new Date(month.dueDate).toLocaleDateString('pt-BR')}
-                        </Text>
-                        <Text style={styles.darfProfit}>
-                          Lucro: {formatCurrency(month.totalProfit)} | Vendas: {formatCurrency(month.totalSales)}
-                        </Text>
-                      </View>
-                    );
-                  })}
-                </View>
-              )}
-
-              {taxData.needsDeclaration && isDeclarationPeriod && (
-                <View style={styles.taxCardYellow}>
-                  <Text style={styles.taxCardTitle}>📋 Período de Declaração</Text>
-                  <Text style={styles.taxCardText}>
-                    Estamos no período de declaração do IR (janeiro a abril).
-                  </Text>
-                  <Text style={styles.taxCardText}>
-                    Seu patrimônio em 31/12: {formatCurrency(taxData.totalPatrimony)}
-                  </Text>
-                  {taxData.totalPatrimony > 5000 && (
-                    <Text style={styles.taxCardText}>
-                      ⚠️ Obrigatório declarar (patrimônio {'>'} R$ 5.000)
-                    </Text>
-                  )}
-                  {sales.length > 0 && (
-                    <Text style={styles.taxCardText}>
-                      ⚠️ Obrigatório declarar (houve vendas no ano)
-                    </Text>
-                  )}
-                </View>
-              )}
-            </View>
-          )}
-
-          {taxData.taxMonths.length > 0 && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>📊 Vendas Mensais</Text>
-              {taxData.taxMonths.map((month, index) => {
-                const monthName = new Date(parseInt(month.year), parseInt(month.month) - 1)
-                  .toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-                
-                return (
-                  <View key={index} style={month.isTaxable ? styles.taxMonthCardTaxable : styles.taxMonthCard}>
-                    <Text style={styles.taxMonthTitle}>{monthName}</Text>
-                    <View style={styles.taxMonthDetails}>
-                      <Text style={styles.taxMonthLabel}>Vendas:</Text>
-                      <Text style={styles.taxMonthValue}>{formatCurrency(month.sales)}</Text>
-                    </View>
-                    <View style={styles.taxMonthDetails}>
-                      <Text style={styles.taxMonthLabel}>Custo:</Text>
-                      <Text style={styles.taxMonthValue}>{formatCurrency(month.cost)}</Text>
-                    </View>
-                    <View style={styles.taxMonthDetails}>
-                      <Text style={styles.taxMonthLabel}>Lucro:</Text>
-                      <Text style={[styles.taxMonthValue, month.profit > 0 ? styles.profitPositive : styles.profitNegative]}>
-                        {formatCurrency(month.profit)}
-                      </Text>
-                    </View>
-                    {month.profit > 0 ? (
-                      <View style={styles.taxDueContainer}>
-                        <Text style={styles.taxDueLabel}>💰 Imposto devido (15%):</Text>
-                        <Text style={styles.taxDueAmount}>{formatCurrency(month.taxDue)}</Text>
-                        <Text style={styles.taxDueDate}>
-                          Venc: {month.dueDate}
-                        </Text>
-                      </View>
-                    ) : month.profit < 0 ? (
-                      <Text style={styles.taxExempt}>✅ Prejuízo pode compensar lucros no ano</Text>
-                    ) : (
-                      <Text style={styles.taxExempt}>➖ Sem lucro ou prejuízo</Text>
-                    )}
-                  </View>
-                );
-              })}
-            </View>
-          )}
-
-          {taxData.patrimonyAssets.length > 0 && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>📦 Bens e Direitos (31/12)</Text>
-              <View style={styles.patrimonyCard}>
-                <Text style={styles.patrimonyTotal}>
-                  Total: {formatCurrency(taxData.totalPatrimony)}
-                </Text>
-                {taxData.patrimonyAssets.map((asset, index) => (
-                  <View key={index} style={styles.patrimonyItem}>
-                    <Text style={styles.patrimonyCode}>Código 81 - Criptoativo</Text>
-                    <Text style={styles.patrimonyCoin}>{asset.coin}</Text>
-                    <Text style={styles.patrimonyQuantity}>
-                      Quantidade: {formatQuantity(asset.quantity)}
-                    </Text>
-                    <Text style={styles.patrimonyCost}>
-                      Custo médio: {formatCurrency(asset.averageCost)}
-                    </Text>
-                    <Text style={styles.patrimonyValue}>
-                      Valor: {formatCurrency(asset.totalCost)}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          )}
-
-          {(taxData.taxMonths.length > 0 || taxData.patrimonyAssets.length > 0) && (
-            <View style={styles.exportSection}>
-              <Text style={styles.exportTitle}>📤 Exportar Relatório</Text>
-              <TouchableOpacity style={styles.exportButton} onPress={shareReport}>
-                <Text style={styles.exportButtonText}>📲 Compartilhar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.exportButton} onPress={copyReport}>
-                <Text style={styles.exportButtonText}>📋 Copiar</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          <View style={styles.taxInfo}>
-            <Text style={styles.taxInfoTitle}>ℹ️ Informações Importantes</Text>
-            <Text style={styles.taxInfoText}>
-              • Vendas até R$ 35.000/mês são isentas de imposto
-            </Text>
-            <Text style={styles.taxInfoText}>
-              • Acima desse valor: 15% sobre o lucro
-            </Text>
-            <Text style={styles.taxInfoText}>
-              • DARF vence no último dia do mês seguinte à venda
-            </Text>
-            <Text style={styles.taxInfoText}>
-              • Declaração obrigatória se patrimônio {'>'} R$ 5.000 em 31/12
-            </Text>
-            <Text style={styles.taxInfoText}>
-              • Mesmo com patrimônio baixo, declarar se houve vendas
-            </Text>
-            <Text style={styles.taxInfoText}>
-              • Código IR: 81 - Criptoativo
-            </Text>
-          </View>
         </ScrollView>
 
         {renderTabBar()}
@@ -2767,38 +2509,6 @@ const styles = StyleSheet.create({
     opacity: 0.7,
     marginTop: 20,
     textAlign: 'center',
-  },
-  developerCredit: {
-    position: 'absolute',
-    bottom: 30,
-    alignItems: 'center',
-  },
-  developerText: {
-    fontSize: 11,
-    color: '#fff',
-    opacity: 0.6,
-  },
-  developerName: {
-    fontSize: 13,
-    color: '#fff',
-    fontWeight: 'bold',
-    marginTop: 5,
-  },
-  homeFooter: {
-    marginTop: 30,
-    marginBottom: 20,
-    padding: 15,
-    backgroundColor: '#e8eaf6',
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  footerText: {
-    fontSize: 12,
-    color: '#666',
-  },
-  footerName: {
-    fontWeight: 'bold',
-    color: '#6200ea',
   },
   developerCredit: {
     position: 'absolute',
@@ -3912,18 +3622,6 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 10,
   },
-  exportButton: {
-    backgroundColor: '#6200ea',
-    padding: 15,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  exportButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
   taxInfo: {
     backgroundColor: '#e3f2fd',
     padding: 15,
@@ -4018,9 +3716,4 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
   },
-  exportButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-});
+
