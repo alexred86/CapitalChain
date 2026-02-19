@@ -13,9 +13,11 @@ import {
   Modal,
   Share,
   Clipboard,
+  Image,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
+import * as ImagePicker from 'expo-image-picker';
 
 interface CryptoPurchase {
   id: string;
@@ -25,6 +27,7 @@ interface CryptoPurchase {
   date: string;
   pricePerUnit: number;
   dollarRate: number;
+  attachment?: string;
 }
 
 interface CryptoSale {
@@ -36,6 +39,7 @@ interface CryptoSale {
   pricePerUnit: number;
   dollarRate: number;
   profit: number;
+  attachment?: string;
 }
 
 const STORAGE_KEY = '@crypto_purchases';
@@ -135,6 +139,10 @@ export default function App() {
   const [importData, setImportData] = useState('');
   const [backupMode, setBackupMode] = useState<'menu' | 'generate' | 'restore'>('menu'); // Novo estado
   const [hideValues, setHideValues] = useState(false); // Ocultar valores
+  const [purchaseAttachment, setPurchaseAttachment] = useState<string | null>(null);
+  const [sellAttachment, setSellAttachment] = useState<string | null>(null);
+  const [viewingAttachment, setViewingAttachment] = useState<string | null>(null);
+  const [showAttachmentModal, setShowAttachmentModal] = useState(false);
 
   useEffect(() => {
     checkBiometricSupport();
@@ -225,6 +233,68 @@ export default function App() {
     } catch (error) {
       console.error('Erro ao salvar prejuízos:', error);
     }
+  };
+
+  const pickImageFromGallery = async (type: 'purchase' | 'sale') => {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    
+    if (permissionResult.granted === false) {
+      Alert.alert('Permissão necessária', 'É necessário permitir acesso à galeria de fotos');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.7,
+      base64: true,
+    });
+
+    if (!result.canceled && result.assets[0].base64) {
+      const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
+      if (type === 'purchase') {
+        setPurchaseAttachment(base64Image);
+      } else {
+        setSellAttachment(base64Image);
+      }
+    }
+  };
+
+  const takePicture = async (type: 'purchase' | 'sale') => {
+    const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+    
+    if (permissionResult.granted === false) {
+      Alert.alert('Permissão necessária', 'É necessário permitir acesso à câmera');
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      quality: 0.7,
+      base64: true,
+    });
+
+    if (!result.canceled && result.assets[0].base64) {
+      const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
+      if (type === 'purchase') {
+        setPurchaseAttachment(base64Image);
+      } else {
+        setSellAttachment(base64Image);
+      }
+    }
+  };
+
+  const removeAttachment = (type: 'purchase' | 'sale') => {
+    if (type === 'purchase') {
+      setPurchaseAttachment(null);
+    } else {
+      setSellAttachment(null);
+    }
+  };
+
+  const viewAttachment = (attachment: string) => {
+    setViewingAttachment(attachment);
+    setShowAttachmentModal(true);
   };
 
   const getUniqueCoins = () => {
@@ -869,6 +939,7 @@ export default function App() {
                 pricePerUnit: price / qty,
                 date: purchaseDate.toISOString(),
                 dollarRate: dRate,
+                attachment: purchaseAttachment || p.attachment,
               }
             : p
         );
@@ -885,6 +956,7 @@ export default function App() {
           date: purchaseDate.toISOString(),
           pricePerUnit: price / qty,
           dollarRate: dRate,
+          ...(purchaseAttachment && { attachment: purchaseAttachment }),
         };
         const updated = [...purchases, newPurchase];
         await savePurchases(updated);
@@ -897,6 +969,7 @@ export default function App() {
       setPricePaid('');
       setDollarRate('');
       setPurchaseDate(new Date());
+      setPurchaseAttachment(null);
       setEditingId(null);
       setScreen('home');
     } catch (error) {
@@ -911,6 +984,7 @@ export default function App() {
     setPricePaid(purchase.pricePaid.toString());
     setDollarRate(purchase.dollarRate.toString());
     setPurchaseDate(new Date(purchase.date));
+    setPurchaseAttachment(purchase.attachment || null);
     setEditingId(purchase.id);
     setScreen('add');
   };
@@ -975,6 +1049,7 @@ export default function App() {
         pricePerUnit: price / qty,
         dollarRate: dRate,
         profit: profit,
+        ...(sellAttachment && { attachment: sellAttachment }),
       };
 
       const updated = [...sales, newSale];
@@ -997,6 +1072,7 @@ export default function App() {
       setSellPrice('');
       setSellDollarRate('');
       setSellDate(new Date());
+      setSellAttachment(null);
       setScreen('home');
     } catch (error) {
       Alert.alert('Erro', 'Não foi possível registrar a venda');
@@ -1503,6 +1579,53 @@ export default function App() {
             </View>
           )}
 
+          <View style={styles.attachmentSection}>
+            <Text style={styles.attachmentLabel}>📎 Comprovante (opcional)</Text>
+            <Text style={styles.attachmentHint}>
+              Anexe prints de depósito, compra na exchange, etc.
+            </Text>
+            
+            {purchaseAttachment ? (
+              <View style={styles.attachmentPreview}>
+                <TouchableOpacity onPress={() => viewAttachment(purchaseAttachment)}>
+                  <View style={styles.attachmentCard}>
+                    <Text style={styles.attachmentIcon}>✅</Text>
+                    <Text style={styles.attachmentText}>Comprovante anexado</Text>
+                  </View>
+                </TouchableOpacity>
+                <View style={styles.attachmentButtons}>
+                  <TouchableOpacity
+                    style={styles.attachmentButtonSmall}
+                    onPress={() => viewAttachment(purchaseAttachment)}
+                  >
+                    <Text style={styles.attachmentButtonText}>👁️ Ver</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.attachmentButtonSmall, styles.attachmentButtonRemove]}
+                    onPress={() => removeAttachment('purchase')}
+                  >
+                    <Text style={styles.attachmentButtonText}>🗑️ Remover</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <View style={styles.attachmentButtons}>
+                <TouchableOpacity
+                  style={styles.attachmentButton}
+                  onPress={() => takePicture('purchase')}
+                >
+                  <Text style={styles.attachmentButtonText}>📷 Tirar Foto</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.attachmentButton}
+                  onPress={() => pickImageFromGallery('purchase')}
+                >
+                  <Text style={styles.attachmentButtonText}>🖼️ Galeria</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+
           <TouchableOpacity style={styles.saveButton} onPress={handleAddPurchase}>
             <Text style={styles.saveButtonText}>{editingId ? '✏️ Atualizar Compra' : '💾 Salvar Compra'}</Text>
           </TouchableOpacity>
@@ -1658,6 +1781,53 @@ export default function App() {
                   </Text>
                 </View>
               )}
+
+              <View style={styles.attachmentSection}>
+                <Text style={styles.attachmentLabel}>📎 Comprovante (opcional)</Text>
+                <Text style={styles.attachmentHint}>
+                  Anexe prints de venda, recebimento, etc.
+                </Text>
+                
+                {sellAttachment ? (
+                  <View style={styles.attachmentPreview}>
+                    <TouchableOpacity onPress={() => viewAttachment(sellAttachment)}>
+                      <View style={styles.attachmentCard}>
+                        <Text style={styles.attachmentIcon}>✅</Text>
+                        <Text style={styles.attachmentText}>Comprovante anexado</Text>
+                      </View>
+                    </TouchableOpacity>
+                    <View style={styles.attachmentButtons}>
+                      <TouchableOpacity
+                        style={styles.attachmentButtonSmall}
+                        onPress={() => viewAttachment(sellAttachment)}
+                      >
+                        <Text style={styles.attachmentButtonText}>👁️ Ver</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.attachmentButtonSmall, styles.attachmentButtonRemove]}
+                        onPress={() => removeAttachment('sale')}
+                      >
+                        <Text style={styles.attachmentButtonText}>🗑️ Remover</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : (
+                  <View style={styles.attachmentButtons}>
+                    <TouchableOpacity
+                      style={styles.attachmentButton}
+                      onPress={() => takePicture('sale')}
+                    >
+                      <Text style={styles.attachmentButtonText}>📷 Tirar Foto</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.attachmentButton}
+                      onPress={() => pickImageFromGallery('sale')}
+                    >
+                      <Text style={styles.attachmentButtonText}>🖼️ Galeria</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
 
               <TouchableOpacity style={styles.sellButton} onPress={handleSellCrypto}>
                 <Text style={styles.saveButtonText}>💸 Registrar Venda</Text>
@@ -2508,7 +2678,12 @@ export default function App() {
                     <Text style={styles.transactionType}>💰 COMPRA</Text>
                     <Text style={styles.coinName}>{item.coin}</Text>
                   </View>
-                  <Text style={styles.date}>{formatDate(item.date)}</Text>
+                  <View style={{alignItems: 'flex-end'}}>
+                    <Text style={styles.date}>{formatDate(item.date)}</Text>
+                    {item.attachment && (
+                      <Text style={styles.attachmentBadge}>📎</Text>
+                    )}
+                  </View>
                 </View>
                 <View style={styles.row}>
                   <Text style={styles.label}>Quantidade:</Text>
@@ -2530,6 +2705,15 @@ export default function App() {
                   <Text style={styles.label}>Custo em Reais:</Text>
                   <Text style={styles.value}>R$ {(item.pricePaid * item.dollarRate).toFixed(2)}</Text>
                 </View>
+                
+                {item.attachment && (
+                  <TouchableOpacity 
+                    style={styles.viewAttachmentButton}
+                    onPress={() => viewAttachment(item.attachment!)}
+                  >
+                    <Text style={styles.viewAttachmentButtonText}>📎 Ver Comprovante</Text>
+                  </TouchableOpacity>
+                )}
                 
                 <View style={styles.actionButtons}>
                   <TouchableOpacity 
@@ -2568,7 +2752,12 @@ export default function App() {
                     <Text style={styles.transactionTypeSale}>💸 VENDA</Text>
                     <Text style={styles.coinName}>{item.coin}</Text>
                   </View>
-                  <Text style={styles.date}>{formatDate(item.date)}</Text>
+                  <View style={{alignItems: 'flex-end'}}>
+                    <Text style={styles.date}>{formatDate(item.date)}</Text>
+                    {item.attachment && (
+                      <Text style={styles.attachmentBadge}>📎</Text>
+                    )}
+                  </View>
                 </View>
                 <View style={styles.row}>
                   <Text style={styles.label}>Quantidade:</Text>
@@ -2596,6 +2785,15 @@ export default function App() {
                     {formatCurrency(Math.abs(item.profit))}
                   </Text>
                 </View>
+                
+                {item.attachment && (
+                  <TouchableOpacity 
+                    style={styles.viewAttachmentButton}
+                    onPress={() => viewAttachment(item.attachment!)}
+                  >
+                    <Text style={styles.viewAttachmentButtonText}>📎 Ver Comprovante</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             ))}
             {sortedSales.length === 0 && transactionType === 'sales' && (
@@ -2833,6 +3031,33 @@ export default function App() {
                 <Text style={styles.exportModalButtonText}>Fechar</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal para visualizar imagem */}
+      <Modal transparent visible={showAttachmentModal} animationType="fade">
+        <View style={styles.attachmentModalContainer}>
+          <View style={styles.attachmentModalContent}>
+            <TouchableOpacity 
+              style={styles.attachmentModalClose}
+              onPress={() => {
+                setShowAttachmentModal(false);
+                setViewingAttachment(null);
+              }}
+            >
+              <Text style={styles.attachmentModalCloseText}>✕</Text>
+            </TouchableOpacity>
+            
+            {viewingAttachment && (
+              <Image 
+                source={{ uri: viewingAttachment }} 
+                style={styles.attachmentModalImage}
+                resizeMode="contain"
+              />
+            )}
+            
+            <Text style={styles.attachmentModalTitle}>📎 Comprovante</Text>
           </View>
         </View>
       </Modal>
@@ -4303,5 +4528,133 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#333',
+  },
+  attachmentSection: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 15,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  attachmentLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 5,
+  },
+  attachmentHint: {
+    fontSize: 12,
+    color: '#999',
+    marginBottom: 15,
+  },
+  attachmentButtons: {
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'center',
+  },
+  attachmentButton: {
+    flex: 1,
+    backgroundColor: '#6200ea',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  attachmentButtonSmall: {
+    flex: 1,
+    backgroundColor: '#6200ea',
+    padding: 10,
+    borderRadius: 6,
+    alignItems: 'center',
+  },
+  attachmentButtonRemove: {
+    backgroundColor: '#f44336',
+  },
+  attachmentButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  attachmentPreview: {
+    gap: 10,
+  },
+  attachmentCard: {
+    backgroundColor: '#e8f5e9',
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#4caf50',
+  },
+  attachmentIcon: {
+    fontSize: 40,
+    marginBottom: 5,
+  },
+  attachmentText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#4caf50',
+  },
+  attachmentBadge: {
+    fontSize: 16,
+    marginTop: 3,
+  },
+  viewAttachmentButton: {
+    backgroundColor: '#e3f2fd',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#2196f3',
+  },
+  viewAttachmentButtonText: {
+    color: '#2196f3',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  attachmentModalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  attachmentModalContent: {
+    width: '100%',
+    height: '90%',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+    alignItems: 'center',
+  },
+  attachmentModalClose: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    zIndex: 10,
+    backgroundColor: '#f44336',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  attachmentModalCloseText: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  attachmentModalImage: {
+    width: '100%',
+    height: '85%',
+    borderRadius: 8,
+    marginTop: 50,
+  },
+  attachmentModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginTop: 10,
   },
 });
