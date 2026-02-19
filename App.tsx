@@ -40,6 +40,7 @@ interface CryptoSale {
 
 const STORAGE_KEY = '@crypto_purchases';
 const SALES_STORAGE_KEY = '@crypto_sales';
+const TAX_LOSSES_KEY = '@crypto_tax_losses';
 
 const formatCurrency = (value: number): string => {
   return new Intl.NumberFormat('en-US', {
@@ -98,6 +99,7 @@ export default function App() {
   const [screen, setScreen] = useState<'home' | 'add' | 'sell' | 'history' | 'taxes'>('home');
   const [purchases, setPurchases] = useState<CryptoPurchase[]>([]);
   const [sales, setSales] = useState<CryptoSale[]>([]);
+  const [taxLosses, setTaxLosses] = useState<{[year: string]: number}>({});
   const [coin, setCoin] = useState('');
   const [quantity, setQuantity] = useState('');
   const [pricePaid, setPricePaid] = useState('');
@@ -187,6 +189,10 @@ export default function App() {
       if (salesData) {
         setSales(JSON.parse(salesData));
       }
+      const lossesData = await AsyncStorage.getItem(TAX_LOSSES_KEY);
+      if (lossesData) {
+        setTaxLosses(JSON.parse(lossesData));
+      }
     } catch (error) {
       console.error('Erro ao carregar:', error);
     } finally {
@@ -207,6 +213,15 @@ export default function App() {
       await AsyncStorage.setItem(SALES_STORAGE_KEY, JSON.stringify(data));
     } catch (error) {
       console.error('Erro ao salvar:', error);
+    }
+  };
+
+  const saveTaxLosses = async (losses: {[year: string]: number}) => {
+    try {
+      await AsyncStorage.setItem(TAX_LOSSES_KEY, JSON.stringify(losses));
+      setTaxLosses(losses);
+    } catch (error) {
+      console.error('Erro ao salvar prejuízos:', error);
     }
   };
 
@@ -717,7 +732,7 @@ export default function App() {
     const netProfit = yearlyProfit - yearlyLoss;
     const compensatedTax = netProfit > 0 ? netProfit * 0.15 : 0;
 
-    // NOVO: Agrupar dados por ano fiscal com patrimônio calculado
+    // NOVO: Agrupar dados por ano fiscal com patrimônio e compensação interanual
     const yearlyData = new Map<string, any>();
     taxMonths.forEach(month => {
       if (!yearlyData.has(month.year)) {
@@ -737,7 +752,13 @@ export default function App() {
       }
     });
 
-    const fiscalYears = Array.from(yearlyData.values()).map(year => {
+    // Ordenar anos para processar sequencialmente
+    const sortedYears = Array.from(yearlyData.keys()).sort();
+    const newTaxLosses: {[year: string]: number} = {};
+    
+    const fiscalYears = sortedYears.map((yearKey, index) => {
+      const year = yearlyData.get(yearKey)!;
+      
       // Calcular patrimônio em 31/12 do ano anterior e do ano atual
       const startDate = new Date(parseInt(year.year) - 1, 11, 31, 23, 59, 59);
       const endDate = new Date(parseInt(year.year), 11, 31, 23, 59, 59);
@@ -745,20 +766,57 @@ export default function App() {
       const patrimonyStart = calculatePatrimonyAtDate(startDate);
       const patrimonyEnd = calculatePatrimonyAtDate(endDate);
       
+      // COMPENSAÇÃO INTERANUAL
+      // Buscar prejuízos acumulados de anos anteriores
+      let accumulatedLoss = 0;
+      for (let i = 0; i < index; i++) {
+        const prevYear = sortedYears[i];
+        accumulatedLoss += taxLosses[prevYear] || 0;
+      }
+      
+      // Calcular resultado líquido do ano
+      const netResult = year.totalProfit - year.totalLoss;
+      
+      // Aplicar compensação de prejuízos acumulados
+      const netResultWithCompensation = netResult - accumulatedLoss;
+      
+      // Imposto após compensação (15% sobre o que sobrar após compensar prejuízos)
+      const taxAfterCompensation = netResultWithCompensation > 0 ? netResultWithCompensation * 0.15 : 0;
+      
+      // Prejuízo a carregar para anos futuros
+      let lossToCarry = 0;
+      if (netResult < 0) {
+        // Teve prejuízo no ano - carregar tudo
+        lossToCarry = Math.abs(netResult);
+      } else if (netResultWithCompensation < 0) {
+        // Teve lucro mas não foi suficiente para cobrir prejuízos anteriores
+        lossToCarry = Math.abs(netResultWithCompensation);
+      }
+      
+      // Armazenar prejuízo para próximos anos (mas não salvar agora - evita loop)
+      if (lossToCarry > 0) {
+        newTaxLosses[year.year] = lossToCarry;
+      }
+      
       return {
         ...year,
         patrimonyStart: patrimonyStart.total,
         patrimonyEnd: patrimonyEnd.total,
         patrimonyStartAssets: patrimonyStart.assets,
         patrimonyEndAssets: patrimonyEnd.assets,
-        netResult: year.totalProfit - year.totalLoss,
-        taxDue: (year.totalProfit - year.totalLoss) > 0 ? (year.totalProfit - year.totalLoss) * 0.15 : 0,
+        netResult,
+        accumulatedLoss, // Prejuízos de anos anteriores
+        netResultWithCompensation, // Resultado após compensar prejuízos
+        taxAfterCompensation, // Imposto após compensação
+        taxDue: taxAfterCompensation, // Usar imposto compensado
+        lossToCarry, // Prejuízo para carregar adiante
         needsDeclaration: patrimonyEnd.total > 5000 || year.months.length > 0,
       };
     });
 
     return {
       fiscalYears: fiscalYears.sort((a, b) => b.year.localeCompare(a.year)),
+      newTaxLosses, // Retornar prejuízos calculados para salvar externamente
       taxMonths: taxMonths.sort((a, b) => `${a.year}-${a.month}`.localeCompare(`${b.year}-${b.month}`)),
       patrimonyAssets: patrimonyAssets.sort((a, b) => b.totalCost - a.totalCost),
       totalPatrimony,
@@ -920,6 +978,12 @@ export default function App() {
       const updated = [...sales, newSale];
       await saveSales(updated);
       setSales(updated);
+
+      // Atualizar prejuízos fiscais após nova venda
+      const tempTaxData = calculateTaxReport();
+      if (tempTaxData.newTaxLosses && Object.keys(tempTaxData.newTaxLosses).length > 0) {
+        await saveTaxLosses(tempTaxData.newTaxLosses);
+      }
 
       Alert.alert(
         'Sucesso!',
