@@ -665,7 +665,37 @@ export default function App() {
     const netProfit = yearlyProfit - yearlyLoss;
     const compensatedTax = netProfit > 0 ? netProfit * 0.15 : 0;
 
+    // NOVO: Agrupar dados por ano fiscal para futura expansão
+    const yearlyData = new Map<string, any>();
+    taxMonths.forEach(month => {
+      if (!yearlyData.has(month.year)) {
+        yearlyData.set(month.year, {
+          year: month.year,
+          months: [],
+          totalProfit: 0,
+          totalLoss: 0,
+        });
+      }
+      const yearData = yearlyData.get(month.year)!;
+      yearData.months.push(month);
+      if (month.profit > 0) {
+        yearData.totalProfit += month.profit;
+      } else {
+        yearData.totalLoss += Math.abs(month.profit);
+      }
+    });
+
+    const fiscalYears = Array.from(yearlyData.values()).map(year => ({
+      ...year,
+      netResult: year.totalProfit - year.totalLoss,
+      taxDue: (year.totalProfit - year.totalLoss) > 0 ? (year.totalProfit - year.totalLoss) * 0.15 : 0,
+      patrimonyStart: 0, // Placeholder para futura implementação
+      patrimonyEnd: totalPatrimony,
+      needsDeclaration: totalPatrimony > 5000 || year.months.length > 0,
+    }));
+
     return {
+      fiscalYears: fiscalYears.sort((a, b) => b.year.localeCompare(a.year)),
       taxMonths: taxMonths.sort((a, b) => `${a.year}-${a.month}`.localeCompare(`${b.year}-${b.month}`)),
       patrimonyAssets: patrimonyAssets.sort((a, b) => b.totalCost - a.totalCost),
       totalPatrimony,
@@ -1648,7 +1678,7 @@ export default function App() {
     };
 
     const copyReport = async () => {
-      await Clipboard.setStringAsync(exportTaxReport());
+      await Clipboard.setString(exportTaxReport());
       Alert.alert('✅ Copiado!', 'Relatório copiado para a área de transferência');
     };
 
@@ -2464,38 +2494,6 @@ const styles = StyleSheet.create({
     opacity: 0.7,
     marginTop: 20,
     textAlign: 'center',
-  },
-  developerCredit: {
-    position: 'absolute',
-    bottom: 30,
-    alignItems: 'center',
-  },
-  developerText: {
-    fontSize: 11,
-    color: '#fff',
-    opacity: 0.6,
-  },
-  developerName: {
-    fontSize: 13,
-    color: '#fff',
-    fontWeight: 'bold',
-    marginTop: 5,
-  },
-  homeFooter: {
-    marginTop: 30,
-    marginBottom: 20,
-    padding: 15,
-    backgroundColor: '#e8eaf6',
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  footerText: {
-    fontSize: 12,
-    color: '#666',
-  },
-  footerName: {
-    fontWeight: 'bold',
-    color: '#6200ea',
   },
   developerCredit: {
     position: 'absolute',
@@ -3603,23 +3601,24 @@ const styles = StyleSheet.create({
     marginTop: 10,
     marginBottom: 15,
   },
+  section: {
+    backgroundColor: '#fff',
+    padding: 15,
+    borderRadius: 8,
+    marginTop: 10,
+    marginBottom: 15,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#6200ea',
+    marginBottom: 10,
+  },
   exportTitle: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#333',
     marginBottom: 10,
-  },
-  exportButton: {
-    backgroundColor: '#6200ea',
-    padding: 15,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  exportButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
   },
   taxInfo: {
     backgroundColor: '#e3f2fd',
