@@ -705,19 +705,15 @@ export default function App() {
       // Prejuízo a ser carregado para anos futuros
       const lossToCarry = netResult < 0 ? Math.abs(netResult) : (netResultWithCompensation < 0 ? Math.abs(netResultWithCompensation) : 0);
       
-      // Atualizar prejuízos acumulados
-      if (lossToCarry > 0) {
-        const newLosses = new Map(taxLosses);
-        newLosses.set(year, lossToCarry);
-        saveTaxLosses(newLosses);
-      }
+      // NÃO salvar aqui - evitar loop infinito
+      // Será salvo quando o usuário confirmar ou na próxima venda
       
       // Organizar meses
       const months: any[] = [];
       yearData.months.forEach((data, monthKey) => {
         const [y, m] = monthKey.split('-');
         const monthNum = parseInt(m);
-        const dueDate = new Date(parseInt(y), monthNum, 0); // Último dia do mês seguinte
+        const dueDate = new Date(parseInt(y), monthNum, 0); // Último dia do mês SEGUINTE à venda
         
         months.push({
           year: y,
