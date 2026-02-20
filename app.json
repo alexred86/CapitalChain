@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "CapitalChain",
-    "slug": "capitalchain",
+    "slug": "capitalchain-v22",
     "owner": "q2h7",
     "version": "1.0.22",
     "orientation": "portrait",
@@ -49,7 +49,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "dbe7391c-7164-4435-8412-d5fa9c0fda16"
+        "projectId": "c4ea5787-77b6-43d9-9989-1e2acff22832"
       }
     }
   }
