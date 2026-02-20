@@ -235,6 +235,38 @@ export default function App() {
     }
   };
 
+  // Determina o código da Receita Federal para cada cripto
+  const getCryptoCode = (coin: string): string => {
+    const coinUpper = coin.toUpperCase();
+    
+    // 08.01 - Bitcoin
+    if (coinUpper === 'BTC' || coinUpper === 'BITCOIN') {
+      return '08.01';
+    }
+    
+    // 08.03 - Stablecoins
+    const stablecoins = ['USDT', 'USDC', 'BUSD', 'DAI', 'TUSD', 'USDP', 'GUSD', 'PYUSD'];
+    if (stablecoins.includes(coinUpper)) {
+      return '08.03';
+    }
+    
+    // 08.02 - Outras moedas digitais
+    return '08.02';
+  };
+
+  const getCryptoDescription = (coin: string): string => {
+    const code = getCryptoCode(coin);
+    const coinUpper = coin.toUpperCase();
+    
+    if (code === '08.01') {
+      return 'Bitcoin';
+    } else if (code === '08.03') {
+      return 'Stablecoins';
+    } else {
+      return 'Outras moedas digitais';
+    }
+  };
+
   const pickImageFromGallery = async (type: 'purchase' | 'sale') => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     
@@ -2123,6 +2155,147 @@ export default function App() {
                                   </Text>
                                 </View>
                               ))}
+                            </View>
+                          )}
+
+                          {/* BENS E DIREITOS - FORMATO RECEITA FEDERAL */}
+                          {year.patrimonyEndAssets && year.patrimonyEndAssets.length > 0 && (
+                            <View style={styles.assetsDetail}>
+                              <Text style={styles.assetsDetailTitle}>
+                                📋 BENS E DIREITOS (Formato Receita Federal)
+                              </Text>
+                              {(() => {
+                                const prevYear = parseInt(year.year) - 1;
+                                
+                                // Agrupar ativos por código RF
+                                const groupedByCode: Record<string, any[]> = {};
+                                year.patrimonyEndAssets.forEach((asset: any) => {
+                                  const code = getCryptoCode(asset.coin);
+                                  if (!groupedByCode[code]) {
+                                    groupedByCode[code] = [];
+                                  }
+                                  groupedByCode[code].push(asset);
+                                });
+                                
+                                const renderItems: JSX.Element[] = [];
+                                
+                                // Processar cada código
+                                Object.keys(groupedByCode).sort().forEach((code) => {
+                                  const assets = groupedByCode[code];
+                                  
+                                  // REGRA 1: Bitcoin (08.01) - SEMPRE individual
+                                  if (code === '08.01') {
+                                    assets.forEach((asset, idx) => {
+                                      const prevYearAsset = year.patrimonyStartAssets?.find((p: any) => p.coin === asset.coin);
+                                      const prevValue = prevYearAsset ? prevYearAsset.totalCost : 0;
+                                      
+                                      renderItems.push(
+                                        <View key={`${code}-${idx}`} style={styles.assetItem}>
+                                          <Text style={[styles.assetCoin, { color: '#667eea' }]}>
+                                            {asset.coin} — (Código {code})
+                                          </Text>
+                                          <Text style={styles.assetQuantity}>
+                                            Situação em 31/12/{prevYear}: {formatCurrency(prevValue)}
+                                          </Text>
+                                          <Text style={styles.assetCost}>
+                                            Situação em 31/12/{year.year}: {formatCurrency(asset.totalCost)}
+                                          </Text>
+                                          <Text style={styles.declarationReason}>
+                                            Aquisição de {formatQuantity(asset.quantity)} {asset.coin} realizada ao longo de {year.year} em corretora internacional, utilizando USDT e recursos próprios. Valores convertidos para BRL conforme cotação do dólar da data de aquisição (R$ 5,33), incluindo taxas de rede e saque. Ativos mantidos em custódia própria (carteira digital).
+                                          </Text>
+                                        </View>
+                                      );
+                                    });
+                                  }
+                                  
+                                  // REGRA 2: Stablecoins (08.03) - SEMPRE consolidadas em campo único
+                                  else if (code === '08.03') {
+                                    const totalValue = assets.reduce((sum, a) => sum + a.totalCost, 0);
+                                    const totalPrevValue = assets.reduce((sum, a) => {
+                                      const prev = year.patrimonyStartAssets?.find((p: any) => p.coin === a.coin);
+                                      return sum + (prev ? prev.totalCost : 0);
+                                    }, 0);
+                                    const coinList = assets.map(a => a.coin).join(', ');
+                                    
+                                    renderItems.push(
+                                      <View key={`${code}-consolidated`} style={styles.assetItem}>
+                                        <Text style={[styles.assetCoin, { color: '#667eea' }]}>
+                                          Stablecoins — (Código {code})
+                                        </Text>
+                                        <Text style={styles.assetQuantity}>
+                                          Situação em 31/12/{prevYear}: {formatCurrency(totalPrevValue)}
+                                        </Text>
+                                        <Text style={styles.assetCost}>
+                                          Situação em 31/12/{year.year}: {formatCurrency(totalValue)}
+                                        </Text>
+                                        <Text style={styles.declarationReason}>
+                                          Conjunto de stablecoins ({coinList}) adquiridas em corretoras internacionais com recursos próprios e mantidas em custódia própria (carteira digital). Valores convertidos para BRL conforme cotação do dólar (R$ 5,33) das datas de aquisição, já incluindo taxas de rede e saque.
+                                        </Text>
+                                      </View>
+                                    );
+                                  }
+                                  
+                                  // REGRA 3: Outras moedas digitais (08.02)
+                                  // - Se individual >= 5K: campo separado
+                                  // - Se individual < 5K: consolidar todas juntas
+                                  else if (code === '08.02') {
+                                    const bigAssets = assets.filter(a => a.totalCost >= 5000);
+                                    const smallAssets = assets.filter(a => a.totalCost < 5000);
+                                    
+                                    // Mostrar grandes individualmente
+                                    bigAssets.forEach((asset, idx) => {
+                                      const prevYearAsset = year.patrimonyStartAssets?.find((p: any) => p.coin === asset.coin);
+                                      const prevValue = prevYearAsset ? prevYearAsset.totalCost : 0;
+                                      
+                                      renderItems.push(
+                                        <View key={`${code}-big-${idx}`} style={styles.assetItem}>
+                                          <Text style={[styles.assetCoin, { color: '#667eea' }]}>
+                                            {asset.coin} — (Código {code})
+                                          </Text>
+                                          <Text style={styles.assetQuantity}>
+                                            Situação em 31/12/{prevYear}: {formatCurrency(prevValue)}
+                                          </Text>
+                                          <Text style={styles.assetCost}>
+                                            Situação em 31/12/{year.year}: {formatCurrency(asset.totalCost)}
+                                          </Text>
+                                          <Text style={styles.declarationReason}>
+                                            Aquisição de {formatQuantity(asset.quantity)} {asset.coin} realizada ao longo de {year.year} em corretora internacional, utilizando USDT e recursos próprios. Valores convertidos para BRL conforme cotação do dólar da data de aquisição (R$ 5,33), incluindo taxas de rede e saque. Ativos mantidos em custódia própria (carteira digital).
+                                          </Text>
+                                        </View>
+                                      );
+                                    });
+                                    
+                                    // Consolidar pequenas
+                                    if (smallAssets.length > 0) {
+                                      const totalValue = smallAssets.reduce((sum, a) => sum + a.totalCost, 0);
+                                      const totalPrevValue = smallAssets.reduce((sum, a) => {
+                                        const prev = year.patrimonyStartAssets?.find((p: any) => p.coin === a.coin);
+                                        return sum + (prev ? prev.totalCost : 0);
+                                      }, 0);
+                                      const coinList = smallAssets.map(a => a.coin).join(', ');
+                                      
+                                      renderItems.push(
+                                        <View key={`${code}-small-consolidated`} style={styles.assetItem}>
+                                          <Text style={[styles.assetCoin, { color: '#667eea' }]}>
+                                            Outras moedas digitais com custo {'<'} R$ 5.000 (CONSOLIDADAS) — (Código {code})
+                                          </Text>
+                                          <Text style={styles.assetQuantity}>
+                                            Situação em 31/12/{prevYear}: {formatCurrency(totalPrevValue)}
+                                          </Text>
+                                          <Text style={styles.assetCost}>
+                                            Situação em 31/12/{year.year}: {formatCurrency(totalValue)}
+                                          </Text>
+                                          <Text style={styles.declarationReason}>
+                                            Conjunto de criptoativos classificados como "outras moedas digitais", adquiridos em corretoras internacionais com recursos próprios e mantidos em custódia própria. Inclui: {coinList}. Todos os ativos possuem custo individual inferior a R$ 5.000. Valores convertidos para BRL conforme cotação do dólar (R$ 5,33) das datas de aquisição, já incluindo taxas de rede e saque.
+                                          </Text>
+                                        </View>
+                                      );
+                                    }
+                                  }
+                                });
+                                
+                                return renderItems;
+                              })()}
                             </View>
                           )}
                         </View>
@@ -4761,6 +4934,13 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#34C759',
     letterSpacing: 0.2,
+  },
+  declarationReason: {
+    fontSize: 13,
+    color: '#666',
+    fontStyle: 'italic',
+    marginTop: 6,
+    lineHeight: 18,
   },
   monthDetailCard: {
     backgroundColor: '#F8F9FD',
