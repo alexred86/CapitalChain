@@ -61,6 +61,17 @@ const formatCurrencyBRL = (value: number, hide: boolean = false): string => {
   }).format(value);
 };
 
+// Formatar preço médio com casas decimais dinâmicas
+const formatAveragePrice = (value: number): string => {
+  const decimals = value < 0.01 ? 8 : value < 1 ? 6 : value < 100 ? 4 : 2;
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(value);
+};
+
 const formatDollarHide = (value: number, hide: boolean = false): string => {
   if (hide) return '$ ****';
   return new Intl.NumberFormat('en-US', {
@@ -2148,7 +2159,7 @@ export default function App() {
                                     Qtd: {formatQuantity(asset.quantity)}
                                   </Text>
                                   <Text style={styles.assetCost}>
-                                    Custo médio: {formatCurrency(asset.averageCost)}
+                                    Custo médio: {formatAveragePrice(asset.averageCost)}
                                   </Text>
                                   <Text style={styles.assetTotal}>
                                     Total: {formatCurrency(asset.totalCost)}
@@ -2161,9 +2172,82 @@ export default function App() {
                           {/* BENS E DIREITOS - FORMATO RECEITA FEDERAL */}
                           {year.patrimonyEndAssets && year.patrimonyEndAssets.length > 0 && (
                             <View style={styles.assetsDetail}>
-                              <Text style={styles.assetsDetailTitle}>
-                                📋 BENS E DIREITOS (Formato Receita Federal)
-                              </Text>
+                              <View style={styles.rfHeaderRow}>
+                                <Text style={styles.assetsDetailTitle}>
+                                  📋 BENS E DIREITOS (Formato Receita Federal)
+                                </Text>
+                                <TouchableOpacity
+                                  style={styles.copyButton}
+                                  onPress={() => {
+                                    // Gerar texto completo para copiar
+                                    const prevYear = parseInt(year.year) - 1;
+                                    const groupedByCode: Record<string, any[]> = {};
+                                    year.patrimonyEndAssets.forEach((asset: any) => {
+                                      const code = getCryptoCode(asset.coin);
+                                      if (!groupedByCode[code]) groupedByCode[code] = [];
+                                      groupedByCode[code].push(asset);
+                                    });
+                                    
+                                    let fullText = `BENS E DIREITOS - ANO ${year.year}\n\n`;
+                                    
+                                    Object.keys(groupedByCode).sort().forEach((code) => {
+                                      const assets = groupedByCode[code];
+                                      
+                                      if (code === '08.01') {
+                                        assets.forEach((asset) => {
+                                          const prev = year.patrimonyStartAssets?.find((p: any) => p.coin === asset.coin);
+                                          const prevValue = prev ? prev.totalCost : 0;
+                                          fullText += `${asset.coin} — (Código ${code})\n`;
+                                          fullText += `Situação em 31/12/${prevYear}: ${formatCurrency(prevValue)}\n`;
+                                          fullText += `Situação em 31/12/${year.year}: ${formatCurrency(asset.totalCost)}\n`;
+                                          fullText += `Aquisição de ${formatQuantity(asset.quantity)} ${asset.coin} realizada ao longo de ${year.year} em corretora internacional, utilizando USDT e recursos próprios. Valores convertidos para BRL conforme cotação do dólar da data de aquisição (R$ 5,33), incluindo taxas de rede e saque. Ativos mantidos em custódia própria (carteira digital).\n\n`;
+                                        });
+                                      } else if (code === '08.03') {
+                                        const totalValue = assets.reduce((sum, a) => sum + a.totalCost, 0);
+                                        const totalPrevValue = assets.reduce((sum, a) => {
+                                          const prev = year.patrimonyStartAssets?.find((p: any) => p.coin === a.coin);
+                                          return sum + (prev ? prev.totalCost : 0);
+                                        }, 0);
+                                        const coinList = assets.map(a => a.coin).join(', ');
+                                        fullText += `Stablecoins — (Código ${code})\n`;
+                                        fullText += `Situação em 31/12/${prevYear}: ${formatCurrency(totalPrevValue)}\n`;
+                                        fullText += `Situação em 31/12/${year.year}: ${formatCurrency(totalValue)}\n`;
+                                        fullText += `Conjunto de stablecoins (${coinList}) adquiridas em corretoras internacionais com recursos próprios e mantidas em custódia própria (carteira digital). Valores convertidos para BRL conforme cotação do dólar (R$ 5,33) das datas de aquisição, já incluindo taxas de rede e saque.\n\n`;
+                                      } else if (code === '08.02') {
+                                        const bigAssets = assets.filter(a => a.totalCost >= 5000);
+                                        const smallAssets = assets.filter(a => a.totalCost < 5000);
+                                        
+                                        bigAssets.forEach((asset) => {
+                                          const prev = year.patrimonyStartAssets?.find((p: any) => p.coin === asset.coin);
+                                          const prevValue = prev ? prev.totalCost : 0;
+                                          fullText += `${asset.coin} — (Código ${code})\n`;
+                                          fullText += `Situação em 31/12/${prevYear}: ${formatCurrency(prevValue)}\n`;
+                                          fullText += `Situação em 31/12/${year.year}: ${formatCurrency(asset.totalCost)}\n`;
+                                          fullText += `Aquisição de ${formatQuantity(asset.quantity)} ${asset.coin} realizada ao longo de ${year.year} em corretora internacional, utilizando USDT e recursos próprios. Valores convertidos para BRL conforme cotação do dólar da data de aquisição (R$ 5,33), incluindo taxas de rede e saque. Ativos mantidos em custódia própria (carteira digital).\n\n`;
+                                        });
+                                        
+                                        if (smallAssets.length > 0) {
+                                          const totalValue = smallAssets.reduce((sum, a) => sum + a.totalCost, 0);
+                                          const totalPrevValue = smallAssets.reduce((sum, a) => {
+                                            const prev = year.patrimonyStartAssets?.find((p: any) => p.coin === a.coin);
+                                            return sum + (prev ? prev.totalCost : 0);
+                                          }, 0);
+                                          const coinList = smallAssets.map(a => a.coin).join(', ');
+                                          fullText += `Outras moedas digitais com custo < R$ 5.000 (CONSOLIDADAS) — (Código ${code})\n`;
+                                          fullText += `Situação em 31/12/${prevYear}: ${formatCurrency(totalPrevValue)}\n`;
+                                          fullText += `Situação em 31/12/${year.year}: ${formatCurrency(totalValue)}\n`;
+                                          fullText += `Conjunto de criptoativos classificados como "outras moedas digitais", adquiridos em corretoras internacionais com recursos próprios e mantidos em custódia própria. Inclui: ${coinList}. Todos os ativos possuem custo individual inferior a R$ 5.000. Valores convertidos para BRL conforme cotação do dólar (R$ 5,33) das datas de aquisição, já incluindo taxas de rede e saque.\n\n`;
+                                        }
+                                      }
+                                    });
+                                    
+                                    Clipboard.setStringAsync(fullText);
+                                    Alert.alert('✅ Copiado!', 'Relatório de Bens e Direitos copiado para a área de transferência');
+                                  }}
+                                >
+                                  <Text style={styles.copyButtonText}>📋 Copiar</Text>
+                                </TouchableOpacity>
+                              </View>
                               {(() => {
                                 const prevYear = parseInt(year.year) - 1;
                                 
@@ -2582,7 +2666,7 @@ export default function App() {
                           Quantidade: {formatQuantity(asset.quantity)}
                         </Text>
                         <Text style={styles.patrimonyCost}>
-                          Custo médio: {formatCurrency(asset.averageCost)}
+                          Custo médio: {formatAveragePrice(asset.averageCost)}
                         </Text>
                         <Text style={styles.patrimonyValue}>
                           Valor: {formatCurrency(asset.totalCost)}
@@ -4941,6 +5025,25 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginTop: 6,
     lineHeight: 18,
+  },
+  rfHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  copyButton: {
+    backgroundColor: '#667eea',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  copyButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
   monthDetailCard: {
     backgroundColor: '#F8F9FD',
