@@ -988,6 +988,13 @@ export default function App() {
         );
         await savePurchases(updated);
         setPurchases(updated);
+        
+        // Recalcular impostos após editar compra
+        const tempTaxData = calculateTaxReport();
+        if (tempTaxData.newTaxLosses && Object.keys(tempTaxData.newTaxLosses).length > 0) {
+          await saveTaxLosses(tempTaxData.newTaxLosses);
+        }
+        
         Alert.alert('Sucesso!', 'Compra atualizada com sucesso!');
       } else {
         // Adicionar nova compra
@@ -1004,6 +1011,13 @@ export default function App() {
         const updated = [...purchases, newPurchase];
         await savePurchases(updated);
         setPurchases(updated);
+        
+        // Recalcular impostos após adicionar compra
+        const tempTaxData = calculateTaxReport();
+        if (tempTaxData.newTaxLosses && Object.keys(tempTaxData.newTaxLosses).length > 0) {
+          await saveTaxLosses(tempTaxData.newTaxLosses);
+        }
+        
         Alert.alert('Sucesso!', 'Compra registrada com sucesso!');
       }
 
@@ -1134,6 +1148,13 @@ export default function App() {
             const updated = purchases.filter((p) => p.id !== id);
             await savePurchases(updated);
             setPurchases(updated);
+            
+            // Recalcular impostos após deletar compra
+            const tempTaxData = calculateTaxReport();
+            if (tempTaxData.newTaxLosses && Object.keys(tempTaxData.newTaxLosses).length > 0) {
+              await saveTaxLosses(tempTaxData.newTaxLosses);
+            }
+            
             Alert.alert('Sucesso', 'Compra excluída!');
           } catch (error) {
             Alert.alert('Erro', 'Não foi possível excluir');
