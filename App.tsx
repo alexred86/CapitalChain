@@ -343,7 +343,7 @@ export default function App() {
     const netProfit = profit - tax;
 
     Alert.alert(
-      '?? Simulação de Venda',
+      '💰 Simulação de Venda',
       `Moeda: ${coinUpper}\n` +
       `Quantidade: ${formatQuantity(qty)}\n` +
       `Preço de Venda: ${formatCurrency(sellPrice)}\n\n` +
@@ -1380,7 +1380,7 @@ export default function App() {
     try {
       if (backupData) {
         await Share.share({
-          message: `?? Backup CapitalChain\n\nData: ${new Date().toLocaleDateString()}\n${purchases.length} compras e ${sales.length} vendas\n\n${backupData}`,
+          message: `💾 Backup CapitalChain\n\nData: ${new Date().toLocaleDateString()}\n${purchases.length} compras e ${sales.length} vendas\n\n${backupData}`,
           title: 'Backup CapitalChain'
         });
       }
@@ -1603,7 +1603,7 @@ export default function App() {
           )}
           
           <TouchableOpacity style={styles.backupButton} onPress={exportBackup}>
-            <Text style={styles.backupButtonText}>?? Backup/Restaurar Dados</Text>
+            <Text style={styles.backupButtonText}>💾 Backup/Restaurar Dados</Text>
           </TouchableOpacity>
           
           <View style={styles.homeFooter}>
@@ -1740,7 +1740,7 @@ export default function App() {
                     style={styles.attachmentButtonSmall}
                     onPress={() => viewAttachment(purchaseAttachment)}
                   >
-                    <Text style={styles.attachmentButtonText}>??? Ver</Text>
+                    <Text style={styles.attachmentButtonText}>?👁️ Ver</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.attachmentButtonSmall, styles.attachmentButtonRemove]}
@@ -1943,7 +1943,7 @@ export default function App() {
                         style={styles.attachmentButtonSmall}
                         onPress={() => viewAttachment(sellAttachment)}
                       >
-                        <Text style={styles.attachmentButtonText}>??? Ver</Text>
+                        <Text style={styles.attachmentButtonText}>?👁️ Ver</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[styles.attachmentButtonSmall, styles.attachmentButtonRemove]}
@@ -2781,7 +2781,7 @@ export default function App() {
           {/* Exportar Relatório */}
           {(taxData.fiscalYears?.length > 0 || taxData.taxMonths.length > 0 || taxData.patrimonyAssets.length > 0) && (
             <View style={styles.exportSection}>
-              <Text style={styles.exportTitle}>?? Exportar Relatório</Text>
+              <Text style={styles.exportTitle}>📤 Exportar Relatório</Text>
               <TouchableOpacity style={styles.exportButton} onPress={shareReport}>
                 <Text style={styles.exportButtonText}>?? Compartilhar</Text>
               </TouchableOpacity>
@@ -2798,11 +2798,11 @@ export default function App() {
               style={styles.exportButton} 
               onPress={() => setShowTaxCalculator(true)}
             >
-              <Text style={styles.exportButtonText}>?? Calculadora de Imposto</Text>
+              <Text style={styles.exportButtonText}>🧮 Calculadora de Imposto</Text>
             </TouchableOpacity>
             
             <View style={styles.darkModeToggle}>
-              <Text style={styles.darkModeText}>?? Modo Escuro</Text>
+              <Text style={styles.darkModeText}>🌙 Modo Escuro</Text>
               <Switch
                 value={isDarkMode}
                 onValueChange={setIsDarkMode}
@@ -2813,7 +2813,7 @@ export default function App() {
           </View>
 
           <View style={styles.taxInfo}>
-            <Text style={styles.taxInfoTitle}>?? Informações Importantes</Text>
+            <Text style={styles.taxInfoTitle}>📊 Informações Importantes</Text>
             <Text style={styles.taxInfoText}>
               • Exchanges Internacionais: 15% sobre QUALQUER ganho
             </Text>
@@ -2968,7 +2968,7 @@ export default function App() {
               <Text style={styles.clearFilterText}>??? Limpar Filtros</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.exportButton} onPress={exportToExcel}>
-              <Text style={styles.exportButtonText}>?? Exportar Excel</Text>
+              <Text style={styles.exportButtonText}>📤 Exportar Excel</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -3088,7 +3088,7 @@ export default function App() {
                     style={styles.viewAttachmentButton}
                     onPress={() => viewAttachment(item.attachment!)}
                   >
-                    <Text style={styles.viewAttachmentButtonText}>?? Ver Comprovante</Text>
+                    <Text style={styles.viewAttachmentButtonText}>👁️ Ver Comprovante</Text>
                   </TouchableOpacity>
                 )}
                 
@@ -3168,7 +3168,7 @@ export default function App() {
                     style={styles.viewAttachmentButton}
                     onPress={() => viewAttachment(item.attachment!)}
                   >
-                    <Text style={styles.viewAttachmentButtonText}>?? Ver Comprovante</Text>
+                    <Text style={styles.viewAttachmentButtonText}>👁️ Ver Comprovante</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -3250,9 +3250,9 @@ export default function App() {
           <View style={styles.exportModalContainer}>
             <View style={styles.exportModalHeader}>
               <Text style={styles.exportModalTitle}>
-                {backupMode === 'menu' && '?? Backup e Restauração'}
+                {backupMode === 'menu' && '💾 Backup e Restauração'}
                 {backupMode === 'generate' && '?? Gerar Backup'}
-                {backupMode === 'restore' && '?? Restaurar Backup'}
+                {backupMode === 'restore' && '📥 Restaurar Backup'}
               </Text>
               <TouchableOpacity onPress={() => {
                 setShowBackupModal(false);
@@ -3444,7 +3444,7 @@ export default function App() {
         <View style={styles.calculatorModal}>
           <View style={[styles.calculatorContent, isDarkMode && styles.darkCalculatorContent]}>
             <Text style={[styles.calculatorTitle, isDarkMode && styles.darkCalculatorTitle]}>
-              ?? Calculadora de Imposto
+              🧮 Calculadora de Imposto
             </Text>
             
             <TextInput
