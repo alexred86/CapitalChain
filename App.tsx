@@ -14,10 +14,13 @@ import {
   Share,
   Clipboard,
   Image,
+  Switch,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as ImagePicker from 'expo-image-picker';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 
 interface CryptoPurchase {
   id: string;
@@ -154,6 +157,14 @@ export default function App() {
   const [sellAttachment, setSellAttachment] = useState<string | null>(null);
   const [viewingAttachment, setViewingAttachment] = useState<string | null>(null);
   const [showAttachmentModal, setShowAttachmentModal] = useState(false);
+  
+  // Novos estados v22
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [showTaxCalculator, setShowTaxCalculator] = useState(false);
+  const [calcCoin, setCalcCoin] = useState('');
+  const [calcQuantity, setCalcQuantity] = useState('');
+  const [calcSellPrice, setCalcSellPrice] = useState('');
+  const [currentDollarRate, setCurrentDollarRate] = useState<number | null>(null);
 
   useEffect(() => {
     checkBiometricSupport();
@@ -276,6 +287,28 @@ export default function App() {
     } else {
       return 'Outras moedas digitais';
     }
+  };
+
+  // Buscar cotação atual do dólar (Banco Central)
+  const fetchDollarRate = async () => {
+    try {
+      const today = new Date();
+      const dateStr = today.toISOString().split('T')[0].replace(/-/g, '');
+      const response = await fetch(
+        `https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoDolarDia(dataCotacao=@dataCotacao)?@dataCotacao='${dateStr}'&$format=json`
+      );
+      const data = await response.json();
+      if (data.value && data.value.length > 0) {
+        const rate = data.value[0].cotacaoVenda;
+        setCurrentDollarRate(rate);
+        setDollarRate(rate.toFixed(2).replace('.', ','));
+        setSellDollarRate(rate.toFixed(2).replace('.', ','));
+        return rate;
+      }
+    } catch (error) {
+      console.error('Erro ao buscar cotação:', error);
+    }
+    return null;
   };
 
   const pickImageFromGallery = async (type: 'purchase' | 'sale') => {
