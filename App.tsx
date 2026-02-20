@@ -169,6 +169,7 @@ export default function App() {
   useEffect(() => {
     checkBiometricSupport();
     loadData();
+    fetchDollarRate(); // Buscar cotação do dólar ao iniciar
   }, []);
 
   const checkBiometricSupport = async () => {
@@ -311,6 +312,51 @@ export default function App() {
     return null;
   };
 
+  // Calculadora de Imposto Pré-Venda
+  const calculateTaxBeforeSale = () => {
+    if (!calcCoin.trim() || !calcQuantity || !calcSellPrice) {
+      Alert.alert('Erro', 'Preencha todos os campos');
+      return;
+    }
+
+    const coinUpper = calcCoin.trim().toUpperCase();
+    const qty = parseFloat(calcQuantity.replace(',', '.'));
+    const sellPrice = parseFloat(calcSellPrice.replace(',', '.'));
+
+    // Buscar compras da moeda
+    const coinPurchases = purchases.filter(p => p.coin === coinUpper);
+    if (coinPurchases.length === 0) {
+      Alert.alert('Aviso', `Você não possui ${coinUpper} registrado`);
+      return;
+    }
+
+    const totalBought = coinPurchases.reduce((sum, p) => sum + p.quantity, 0);
+    if (qty > totalBought) {
+      Alert.alert('Erro', `Você só tem ${formatQuantity(totalBought)} ${coinUpper}`);
+      return;
+    }
+
+    // Calcular preço médio de compra
+    const avgCost = coinPurchases.reduce((sum, p) => sum + p.pricePaid, 0) / totalBought;
+    const profit = sellPrice - (avgCost * qty);
+    
+    // Imposto 15% sobre lucro
+    const tax = profit > 0 ? profit * 0.15 : 0;
+    const netProfit = profit - tax;
+
+    Alert.alert(
+      '?? Simulação de Venda',
+      `Moeda: ${coinUpper}\n` +
+      `Quantidade: ${formatQuantity(qty)}\n` +
+      `Preço de Venda: ${formatCurrency(sellPrice)}\n\n` +
+      `Custo Médio: ${formatCurrency(avgCost * qty)}\n` +
+      `${profit >= 0 ? 'Lucro' : 'Prejuízo'}: ${formatCurrency(Math.abs(profit))}\n\n` +
+      `Imposto (15%): ${formatCurrency(tax)}\n` +
+      `${profit >= 0 ? 'Lucro Líquido' : 'Prejuízo Total'}: ${formatCurrency(netProfit)}`,
+      [{ text: 'OK' }]
+    );
+  };
+
   const pickImageFromGallery = async (type: 'purchase' | 'sale') => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     
@@ -336,6 +382,28 @@ export default function App() {
     }
   };
 
+  // Exportar Relatório RF para PDF
+  const exportRFReportToPDF = async () => {
+    try {
+      const taxData = calculateTaxReport();
+      
+      let html = '<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><style>body{font-family:Arial;padding:20px}h1{color:#2c3e50}h2{color:#34495e;margin-top:20px}.section{border:1px solid #ddd;padding:15px;margin:15px 0;border-radius:5px}.label{font-weight:bold}</style></head><body><h1> Relatório Receita Federal</h1><p><strong>Gerado em:</strong> ' + new Date().toLocaleDateString('pt-BR') + '</p><hr/>';
+      
+      if (taxData.fiscalYears && taxData.fiscalYears.length > 0) {
+        taxData.fiscalYears.forEach((year: any) => {
+          html += '<div class=\"section\"><h2> Ano ' + year.year + '</h2><p><span class=\"label\">Resultado:</span> ' + formatCurrency(year.netResult) + '</p><p><span class=\"label\">Imposto (15%):</span> ' + formatCurrency(year.taxDue) + '</p></div>';
+        });
+      }
+      
+      html += '</body></html>';
+
+      const { uri } = await Print.printToFileAsync({ html });
+      await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
+      Alert.alert(' Sucesso', 'PDF exportado!');
+    } catch (error) {
+      Alert.alert('Erro', 'Não foi possível exportar o PDF');
+    }
+  };
   const takePicture = async (type: 'purchase' | 'sale') => {
     const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
     
@@ -481,7 +549,7 @@ export default function App() {
       <Modal transparent visible={visible} animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.datePickerContainer}>
-            <Text style={styles.datePickerTitle}>📅 Selecione a Data</Text>
+            <Text style={styles.datePickerTitle}>?? Selecione a Data</Text>
             
             <View style={styles.dateSelectorsRow}>
               {/* Seletor de Dia */}
@@ -581,7 +649,7 @@ export default function App() {
 
             <View style={styles.datePickerPreview}>
               <Text style={styles.datePickerPreviewText}>
-                📆 {date.getDate()} de {monthNames[date.getMonth()]} de {date.getFullYear()}
+                ?? {date.getDate()} de {monthNames[date.getMonth()]} de {date.getFullYear()}
               </Text>
             </View>
 
@@ -1205,11 +1273,11 @@ export default function App() {
       const salesSummary = calculateFilteredSalesSummary(filteredSales);
       
       // Criar conteúdo formatado
-      let content = '📊 RELATÓRIO DE CRIPTOMOEDAS\n';
+      let content = '?? RELATÓRIO DE CRIPTOMOEDAS\n';
       content += '='.repeat(50) + '\n\n';
       
       // Informações do filtro
-      content += '🔍 FILTROS APLICADOS:\n';
+      content += '?? FILTROS APLICADOS:\n';
       content += `Tipo: ${transactionType === 'all' ? 'Compras e Vendas' : transactionType === 'purchases' ? 'Apenas Compras' : 'Apenas Vendas'}\n`;
       content += `Moeda: ${filterCoin || 'Todas'}\n`;
       content += `Data Inicial: ${filterStartDate ? formatDate(filterStartDate) : 'Sem filtro'}\n`;
@@ -1219,7 +1287,7 @@ export default function App() {
       
       // Resumo de Compras
       if ((transactionType === 'all' || transactionType === 'purchases') && purchaseSummary.length > 0) {
-        content += '💰 RESUMO DE COMPRAS:\n';
+        content += '?? RESUMO DE COMPRAS:\n';
         content += '-'.repeat(50) + '\n';
         purchaseSummary.forEach(item => {
           content += `\n${item.coin}\n`;
@@ -1240,7 +1308,7 @@ export default function App() {
       
       // Resumo de Vendas
       if ((transactionType === 'all' || transactionType === 'sales') && salesSummary.length > 0) {
-        content += '💸 RESUMO DE VENDAS:\n';
+        content += '?? RESUMO DE VENDAS:\n';
         content += '-'.repeat(50) + '\n';
         salesSummary.forEach(item => {
           content += `\n${item.coin}\n`;
@@ -1264,7 +1332,7 @@ export default function App() {
       
       // Compras detalhadas
       if ((transactionType === 'all' || transactionType === 'purchases') && filteredPurchases.length > 0) {
-        content += '📝 COMPRAS DETALHADAS:\n';
+        content += '?? COMPRAS DETALHADAS:\n';
         content += '-'.repeat(50) + '\n';
         const sortedPurchases = [...filteredPurchases].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         sortedPurchases.forEach((purchase, index) => {
@@ -1280,7 +1348,7 @@ export default function App() {
       
       // Vendas detalhadas
       if ((transactionType === 'all' || transactionType === 'sales') && filteredSales.length > 0) {
-        content += '💰 VENDAS DETALHADAS:\n';
+        content += '?? VENDAS DETALHADAS:\n';
         content += '-'.repeat(50) + '\n';
         const sortedSales = [...filteredSales].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         sortedSales.forEach((sale, index) => {
@@ -1327,7 +1395,7 @@ export default function App() {
   const copyBackupToClipboard = () => {
     if (backupData) {
       Clipboard.setString(backupData);
-      Alert.alert('✅ Copiado!', 'O backup foi copiado para a área de transferência. Cole em um local seguro (WhatsApp, Email, Drive, etc.)');
+      Alert.alert('? Copiado!', 'O backup foi copiado para a área de transferência. Cole em um local seguro (WhatsApp, Email, Drive, etc.)');
     }
   };
 
@@ -1335,7 +1403,7 @@ export default function App() {
     try {
       if (backupData) {
         await Share.share({
-          message: `📦 Backup CapitalChain\n\nData: ${new Date().toLocaleDateString()}\n${purchases.length} compras e ${sales.length} vendas\n\n${backupData}`,
+          message: `?? Backup CapitalChain\n\nData: ${new Date().toLocaleDateString()}\n${purchases.length} compras e ${sales.length} vendas\n\n${backupData}`,
           title: 'Backup CapitalChain'
         });
       }
@@ -1413,7 +1481,7 @@ export default function App() {
         style={styles.hideButton} 
         onPress={() => setHideValues(!hideValues)}
       >
-        <Text style={styles.hideButtonText}>{hideValues ? '🙈' : '👁️'}</Text>
+        <Text style={styles.hideButtonText}>{hideValues ? '??' : '???'}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -1422,27 +1490,27 @@ export default function App() {
     <View style={styles.tabBar}>
       <TouchableOpacity style={styles.tab} onPress={() => setScreen('home')}>
         <Text style={screen === 'home' ? styles.tabTextActive : styles.tabText}>
-          🏠{'\n'}Início
+          ??{'\n'}Início
         </Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.tab} onPress={() => setScreen('add')}>
         <Text style={screen === 'add' ? styles.tabTextActive : styles.tabText}>
-          ➕{'\n'}Comprar
+          ?{'\n'}Comprar
         </Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.tab} onPress={() => setScreen('sell')}>
         <Text style={screen === 'sell' ? styles.tabTextActive : styles.tabText}>
-          💸{'\n'}Vender
+          ??{'\n'}Vender
         </Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.tab} onPress={() => setScreen('history')}>
         <Text style={screen === 'history' ? styles.tabTextActive : styles.tabText}>
-          📋{'\n'}Histórico
+          ??{'\n'}Histórico
         </Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.tab} onPress={() => setScreen('taxes')}>
         <Text style={screen === 'taxes' ? styles.tabTextActive : styles.tabText}>
-          💰{'\n'}Impostos
+          ??{'\n'}Impostos
         </Text>
       </TouchableOpacity>
     </View>
@@ -1462,7 +1530,7 @@ export default function App() {
     return (
       <SafeAreaView style={styles.authContainer}>
         <View style={styles.authContent}>
-          <Text style={styles.authIcon}>🔒</Text>
+          <Text style={styles.authIcon}>??</Text>
           <Text style={styles.authTitle}>CapitalChain</Text>
           <Text style={styles.authSubtitle}>Seus dados estão protegidos</Text>
           
@@ -1470,7 +1538,7 @@ export default function App() {
             style={styles.authButton} 
             onPress={handleAuthentication}
           >
-            <Text style={styles.authButtonIcon}>👆</Text>
+            <Text style={styles.authButtonIcon}>??</Text>
             <Text style={styles.authButtonText}>
               {isBiometricSupported ? 'Desbloquear com Biometria' : 'Desbloquear'}
             </Text>
@@ -1510,7 +1578,7 @@ export default function App() {
             style={styles.hideButton} 
             onPress={() => setHideValues(!hideValues)}
           >
-            <Text style={styles.hideButtonText}>{hideValues ? '🙈' : '👁️'}</Text>
+            <Text style={styles.hideButtonText}>{hideValues ? '??' : '???'}</Text>
           </TouchableOpacity>
         </View>
 
@@ -1558,12 +1626,12 @@ export default function App() {
           )}
           
           <TouchableOpacity style={styles.backupButton} onPress={exportBackup}>
-            <Text style={styles.backupButtonText}>💾 Backup/Restaurar Dados</Text>
+            <Text style={styles.backupButtonText}>?? Backup/Restaurar Dados</Text>
           </TouchableOpacity>
           
           <View style={styles.homeFooter}>
             <Text style={styles.footerText}>
-              👨‍💻 Desenvolvido por <Text style={styles.footerName}>@Alexred</Text>
+              ????? Desenvolvido por <Text style={styles.footerName}>@Alexred</Text>
             </Text>
           </View>
         </ScrollView>
@@ -1660,7 +1728,7 @@ export default function App() {
               }}
             >
               <Text style={styles.dateButtonText}>
-                {purchaseDate ? `📅 ${formatDate(purchaseDate.toISOString())}` : '📅 Selecionar Data'}
+                {purchaseDate ? `?? ${formatDate(purchaseDate.toISOString())}` : '?? Selecionar Data'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -1677,7 +1745,7 @@ export default function App() {
           )}
 
           <View style={styles.attachmentSection}>
-            <Text style={styles.attachmentLabel}>📎 Comprovante (opcional)</Text>
+            <Text style={styles.attachmentLabel}>?? Comprovante (opcional)</Text>
             <Text style={styles.attachmentHint}>
               Anexe prints de depósito, compra na exchange, etc.
             </Text>
@@ -1686,7 +1754,7 @@ export default function App() {
               <View style={styles.attachmentPreview}>
                 <TouchableOpacity onPress={() => viewAttachment(purchaseAttachment)}>
                   <View style={styles.attachmentCard}>
-                    <Text style={styles.attachmentIcon}>✅</Text>
+                    <Text style={styles.attachmentIcon}>?</Text>
                     <Text style={styles.attachmentText}>Comprovante anexado</Text>
                   </View>
                 </TouchableOpacity>
@@ -1695,13 +1763,13 @@ export default function App() {
                     style={styles.attachmentButtonSmall}
                     onPress={() => viewAttachment(purchaseAttachment)}
                   >
-                    <Text style={styles.attachmentButtonText}>👁️ Ver</Text>
+                    <Text style={styles.attachmentButtonText}>??? Ver</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.attachmentButtonSmall, styles.attachmentButtonRemove]}
                     onPress={() => removeAttachment('purchase')}
                   >
-                    <Text style={styles.attachmentButtonText}>🗑️ Remover</Text>
+                    <Text style={styles.attachmentButtonText}>??? Remover</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -1711,20 +1779,20 @@ export default function App() {
                   style={styles.attachmentButton}
                   onPress={() => takePicture('purchase')}
                 >
-                  <Text style={styles.attachmentButtonText}>📷 Tirar Foto</Text>
+                  <Text style={styles.attachmentButtonText}>?? Tirar Foto</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.attachmentButton}
                   onPress={() => pickImageFromGallery('purchase')}
                 >
-                  <Text style={styles.attachmentButtonText}>🖼️ Galeria</Text>
+                  <Text style={styles.attachmentButtonText}>??? Galeria</Text>
                 </TouchableOpacity>
               </View>
             )}
           </View>
 
           <TouchableOpacity style={styles.saveButton} onPress={handleAddPurchase}>
-            <Text style={styles.saveButtonText}>{editingId ? '✏️ Atualizar Compra' : '💾 Salvar Compra'}</Text>
+            <Text style={styles.saveButtonText}>{editingId ? '?? Atualizar Compra' : '?? Salvar Compra'}</Text>
           </TouchableOpacity>
 
           {editingId && (
@@ -1796,7 +1864,7 @@ export default function App() {
           ) : (
             <>
               <View style={styles.availableCoinsCard}>
-                <Text style={styles.availableTitle}>💼 Disponível para Venda:</Text>
+                <Text style={styles.availableTitle}>?? Disponível para Venda:</Text>
                 {availableCoins.map(item => (
                   <TouchableOpacity 
                     key={item.coin}
@@ -1863,7 +1931,7 @@ export default function App() {
                   }}
                 >
                   <Text style={styles.dateButtonText}>
-                    {sellDate ? `📅 ${formatDate(sellDate.toISOString())}` : '📅 Selecionar Data'}
+                    {sellDate ? `?? ${formatDate(sellDate.toISOString())}` : '?? Selecionar Data'}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1880,7 +1948,7 @@ export default function App() {
               )}
 
               <View style={styles.attachmentSection}>
-                <Text style={styles.attachmentLabel}>📎 Comprovante (opcional)</Text>
+                <Text style={styles.attachmentLabel}>?? Comprovante (opcional)</Text>
                 <Text style={styles.attachmentHint}>
                   Anexe prints de venda, recebimento, etc.
                 </Text>
@@ -1889,7 +1957,7 @@ export default function App() {
                   <View style={styles.attachmentPreview}>
                     <TouchableOpacity onPress={() => viewAttachment(sellAttachment)}>
                       <View style={styles.attachmentCard}>
-                        <Text style={styles.attachmentIcon}>✅</Text>
+                        <Text style={styles.attachmentIcon}>?</Text>
                         <Text style={styles.attachmentText}>Comprovante anexado</Text>
                       </View>
                     </TouchableOpacity>
@@ -1898,13 +1966,13 @@ export default function App() {
                         style={styles.attachmentButtonSmall}
                         onPress={() => viewAttachment(sellAttachment)}
                       >
-                        <Text style={styles.attachmentButtonText}>👁️ Ver</Text>
+                        <Text style={styles.attachmentButtonText}>??? Ver</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[styles.attachmentButtonSmall, styles.attachmentButtonRemove]}
                         onPress={() => removeAttachment('sale')}
                       >
-                        <Text style={styles.attachmentButtonText}>🗑️ Remover</Text>
+                        <Text style={styles.attachmentButtonText}>??? Remover</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -1914,20 +1982,20 @@ export default function App() {
                       style={styles.attachmentButton}
                       onPress={() => takePicture('sale')}
                     >
-                      <Text style={styles.attachmentButtonText}>📷 Tirar Foto</Text>
+                      <Text style={styles.attachmentButtonText}>?? Tirar Foto</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.attachmentButton}
                       onPress={() => pickImageFromGallery('sale')}
                     >
-                      <Text style={styles.attachmentButtonText}>🖼️ Galeria</Text>
+                      <Text style={styles.attachmentButtonText}>??? Galeria</Text>
                     </TouchableOpacity>
                   </View>
                 )}
               </View>
 
               <TouchableOpacity style={styles.sellButton} onPress={handleSellCrypto}>
-                <Text style={styles.saveButtonText}>💸 Registrar Venda</Text>
+                <Text style={styles.saveButtonText}>?? Registrar Venda</Text>
               </TouchableOpacity>
             </>
           )}
@@ -1987,50 +2055,50 @@ export default function App() {
     };
 
     const exportTaxReport = () => {
-      let report = '📊 RELATÓRIO DE IMPOSTOS - CRIPTOMOEDAS 2026\n\n';
+      let report = '?? RELATÓRIO DE IMPOSTOS - CRIPTOMOEDAS 2026\n\n';
       
-      report += '═══════════════════════════════════════\n';
-      report += '🌍 NOVA LEI 2026 - EXCHANGES INTERNACIONAIS\n';
-      report += '═══════════════════════════════════════\n';
+      report += '---------------------------------------\n';
+      report += '?? NOVA LEI 2026 - EXCHANGES INTERNACIONAIS\n';
+      report += '---------------------------------------\n';
       report += '• 15% sobre QUALQUER ganho de capital\n';
       report += '• SEM isenção de R$ 35.000\n';
       report += '• Compensação de perdas INTERANUAL (indefinida)\n\n';
       
       if (taxData.fiscalYears && taxData.fiscalYears.length > 0) {
-        report += '═══════════════════════════════════════\n';
+        report += '---------------------------------------\n';
         report += 'DECLARAÇÃO POR ANO FISCAL\n';
-        report += '═══════════════════════════════════════\n\n';
+        report += '---------------------------------------\n\n';
         
         taxData.fiscalYears.forEach(year => {
-          report += `\n📅 ANO FISCAL ${year.year}\n`;
-          report += `${'─'.repeat(39)}\n\n`;
+          report += `\n?? ANO FISCAL ${year.year}\n`;
+          report += `${'-'.repeat(39)}\n\n`;
           
-          report += '📋 BENS E DIREITOS (31/12):\n';
+          report += '?? BENS E DIREITOS (31/12):\n';
           report += `   Ano Anterior: ${formatCurrency(year.patrimonyStart)}\n`;
           report += `   Ano Atual: ${formatCurrency(year.patrimonyEnd)}\n`;
           report += `   Variação: ${formatCurrency(year.patrimonyEnd - year.patrimonyStart)}\n\n`;
           
-          report += '💰 GANHOS DE CAPITAL:\n';
+          report += '?? GANHOS DE CAPITAL:\n';
           report += `   Ganhos: ${formatCurrency(year.totalProfit)}\n`;
           report += `   Perdas: ${formatCurrency(year.totalLoss)}\n`;
           report += `   Resultado Bruto: ${formatCurrency(year.netResult)}\n\n`;
           
           if (year.accumulatedLoss > 0) {
-            report += '📊 COMPENSAÇÃO:\n';
+            report += '?? COMPENSAÇÃO:\n';
             report += `   Prejuízos de anos anteriores: ${formatCurrency(year.accumulatedLoss)}\n`;
             report += `   Resultado após compensação: ${formatCurrency(year.netResultWithCompensation)}\n\n`;
           }
           
-          report += '⚠️ IMPOSTO:\n';
+          report += '?? IMPOSTO:\n';
           report += `   Base de cálculo: ${formatCurrency(Math.max(0, year.netResultWithCompensation))}\n`;
           report += `   Imposto devido (15%): ${formatCurrency(year.taxDue)}\n\n`;
           
           if (year.lossToCarry > 0) {
-            report += `📌 Prejuízo a compensar nos próximos anos: ${formatCurrency(year.lossToCarry)}\n\n`;
+            report += `?? Prejuízo a compensar nos próximos anos: ${formatCurrency(year.lossToCarry)}\n\n`;
           }
           
           if (year.needsDeclaration) {
-            report += '✅ DECLARAÇÃO OBRIGATÓRIA\n';
+            report += '? DECLARAÇÃO OBRIGATÓRIA\n';
             if (year.patrimonyEnd > 5000) {
               report += '   Motivo: Patrimônio > R$ 5.000\n';
             }
@@ -2040,11 +2108,11 @@ export default function App() {
             report += '\n';
           }
           
-          report += `${'═'.repeat(39)}\n`;
+          report += `${'-'.repeat(39)}\n`;
         });
       }
       
-      report += '\n═══════════════════════════════════════\n';
+      report += '\n---------------------------------------\n';
       report += 'Relatório gerado em: ' + new Date().toLocaleDateString('pt-BR') + '\n';
       report += 'CapitalChain - Gestor de Criptomoedas\n';
       
@@ -2064,13 +2132,13 @@ export default function App() {
 
     const copyReport = async () => {
       await Clipboard.setString(exportTaxReport());
-      Alert.alert('✅ Copiado!', 'Relatório copiado para a área de transferência');
+      Alert.alert('? Copiado!', 'Relatório copiado para a área de transferência');
     };
 
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>💰 Impostos</Text>
+          <Text style={styles.headerTitle}>?? Impostos</Text>
           <Text style={styles.subtitle}>Declaração por Ano Fiscal</Text>
         </View>
 
@@ -2082,7 +2150,7 @@ export default function App() {
               onPress={() => setTaxViewMode('years')}
             >
               <Text style={[styles.toggleButtonText, taxViewMode === 'years' && styles.toggleButtonTextActive]}>
-                📅 Por Ano Fiscal
+                ?? Por Ano Fiscal
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -2090,13 +2158,13 @@ export default function App() {
               onPress={() => setTaxViewMode('months')}
             >
               <Text style={[styles.toggleButtonText, taxViewMode === 'months' && styles.toggleButtonTextActive]}>
-                📆 Por Mês
+                ?? Por Mês
               </Text>
             </TouchableOpacity>
           </View>
 
           <View style={styles.taxCardBlue}>
-            <Text style={styles.taxCardTitle}>🌍 Nova Lei 2026 - Exchanges Internacionais</Text>
+            <Text style={styles.taxCardTitle}>?? Nova Lei 2026 - Exchanges Internacionais</Text>
             <Text style={styles.taxCardText}>
               • 15% sobre QUALQUER ganho de capital{"\n"}
               • SEM isenção de R$ 35.000{"\n"}
@@ -2107,7 +2175,7 @@ export default function App() {
           {/* VISUALIZAÇÃO POR ANO FISCAL */}
           {taxViewMode === 'years' && taxData.fiscalYears && taxData.fiscalYears.length > 0 && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>📅 Declaração por Ano Fiscal</Text>
+              <Text style={styles.sectionTitle}>?? Declaração por Ano Fiscal</Text>
               <Text style={styles.sectionSubtitle}>
                 Toque em cada ano para ver os detalhes
               </Text>
@@ -2131,10 +2199,10 @@ export default function App() {
                       <View style={styles.fiscalYearHeader}>
                         <View style={styles.fiscalYearTitleRow}>
                           <Text style={styles.fiscalYearTitle}>
-                            📅 Ano Fiscal {year.year}
+                            ?? Ano Fiscal {year.year}
                           </Text>
                           <Text style={styles.fiscalYearToggle}>
-                            {isExpanded ? '▼' : '▶'}
+                            {isExpanded ? '?' : '?'}
                           </Text>
                         </View>
                         
@@ -2183,7 +2251,7 @@ export default function App() {
                       <View style={styles.fiscalYearDetails}>
                         {/* Bens e Direitos */}
                         <View style={styles.detailSection}>
-                          <Text style={styles.detailSectionTitle}>📋 Bens e Direitos (31/12)</Text>
+                          <Text style={styles.detailSectionTitle}>?? Bens e Direitos (31/12)</Text>
                           <View style={styles.detailRow}>
                             <Text style={styles.detailLabel}>Ano Anterior ({parseInt(year.year) - 1}):</Text>
                             <Text style={styles.detailValue}>{formatCurrency(year.patrimonyStart)}</Text>
@@ -2228,11 +2296,11 @@ export default function App() {
                             <View style={styles.assetsDetail}>
                               <View style={styles.rfHeaderRow}>
                                 <Text style={styles.assetsDetailTitle}>
-                                  📋 BENS E DIREITOS (Formato Receita Federal)
+                                  ?? BENS E DIREITOS (Formato Receita Federal)
                                 </Text>
                                 <TouchableOpacity
                                   style={styles.copyButton}
-                                  onPress={() => {
+                                  onPress={async () => {
                                     // Gerar texto completo para copiar
                                     const prevYear = parseInt(year.year) - 1;
                                     const groupedByCode: Record<string, any[]> = {};
@@ -2295,11 +2363,11 @@ export default function App() {
                                       }
                                     });
                                     
-                                    Clipboard.setStringAsync(fullText);
-                                    Alert.alert('✅ Copiado!', 'Relatório de Bens e Direitos copiado para a área de transferência');
+                                    await Clipboard.setString(fullText);
+                                    Alert.alert('? Copiado!', 'Relatório de Bens e Direitos copiado para a área de transferência');
                                   }}
                                 >
-                                  <Text style={styles.copyButtonText}>📋 Copiar</Text>
+                                  <Text style={styles.copyButtonText}>?? Copiar</Text>
                                 </TouchableOpacity>
                               </View>
                               {(() => {
@@ -2440,7 +2508,7 @@ export default function App() {
                         
                         {/* Ganhos de Capital */}
                         <View style={styles.detailSection}>
-                          <Text style={styles.detailSectionTitle}>💰 Ganhos de Capital</Text>
+                          <Text style={styles.detailSectionTitle}>?? Ganhos de Capital</Text>
                           <View style={styles.detailRow}>
                             <Text style={styles.detailLabel}>Ganhos:</Text>
                             <Text style={[styles.detailValue, styles.profit]}>
@@ -2467,7 +2535,7 @@ export default function App() {
                         {/* Compensação de Prejuízos */}
                         {hadCompensation && (
                           <View style={[styles.detailSection, styles.compensationSection]}>
-                            <Text style={styles.detailSectionTitle}>📊 Compensação de Prejuízos</Text>
+                            <Text style={styles.detailSectionTitle}>?? Compensação de Prejuízos</Text>
                             <View style={styles.detailRow}>
                               <Text style={styles.detailLabel}>Prejuízos de anos anteriores:</Text>
                               <Text style={[styles.detailValue, styles.loss]}>
@@ -2488,7 +2556,7 @@ export default function App() {
                         
                         {/* Imposto */}
                         <View style={[styles.detailSection, styles.taxSection]}>
-                          <Text style={styles.detailSectionTitle}>⚠️ Imposto sobre Ganhos de Capital</Text>
+                          <Text style={styles.detailSectionTitle}>?? Imposto sobre Ganhos de Capital</Text>
                           <View style={styles.detailRow}>
                             <Text style={styles.detailLabel}>Base de cálculo (15%):</Text>
                             <Text style={styles.detailValue}>
@@ -2506,7 +2574,7 @@ export default function App() {
                         {/* Prejuízo a Compensar */}
                         {year.lossToCarry > 0 && (
                           <View style={[styles.detailSection, styles.lossCarrySection]}>
-                            <Text style={styles.detailSectionTitle}>📌 Prejuízo para Anos Futuros</Text>
+                            <Text style={styles.detailSectionTitle}>?? Prejuízo para Anos Futuros</Text>
                             <Text style={styles.lossCarryText}>
                               Este prejuízo pode ser usado para compensar ganhos em anos futuros (sem prazo limite):
                             </Text>
@@ -2519,7 +2587,7 @@ export default function App() {
                         {/* Declaração */}
                         {year.needsDeclaration && (
                           <View style={[styles.detailSection, styles.declarationSection]}>
-                            <Text style={styles.detailSectionTitle}>✅ Declaração Obrigatória</Text>
+                            <Text style={styles.detailSectionTitle}>? Declaração Obrigatória</Text>
                             {year.patrimonyEnd > 5000 && (
                               <Text style={styles.declarationReason}>
                                 • Patrimônio em 31/12 superior a R$ 5.000
@@ -2536,7 +2604,7 @@ export default function App() {
                         {/* Detalhamento Mensal */}
                         {year.months && year.months.length > 0 && (
                           <View style={styles.detailSection}>
-                            <Text style={styles.detailSectionTitle}>📆 Detalhamento Mensal</Text>
+                            <Text style={styles.detailSectionTitle}>?? Detalhamento Mensal</Text>
                             {year.months.map((month: any, idx: number) => {
                               const monthName = new Date(parseInt(month.year), parseInt(month.month) - 1)
                                 .toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
@@ -2579,7 +2647,7 @@ export default function App() {
             <View>
               {taxData.netProfit > 0 && (
                 <View style={styles.taxCardOrange}>
-                  <Text style={styles.taxCardTitle}>💰 Resultado Anual</Text>
+                  <Text style={styles.taxCardTitle}>?? Resultado Anual</Text>
                   <Text style={styles.taxCardText}>
                     Lucro: {formatCurrency(taxData.yearlyProfit)}{"\n"}
                     Prejuízo: {formatCurrency(taxData.yearlyLoss)}{"\n"}
@@ -2594,7 +2662,7 @@ export default function App() {
 
               {allClear ? (
                 <View style={styles.taxCardGreen}>
-                  <Text style={styles.taxCardTitle}>✅ Tudo em ordem!</Text>
+                  <Text style={styles.taxCardTitle}>? Tudo em ordem!</Text>
                   <Text style={styles.taxCardText}>
                     Você não possui DARFs pendentes no momento.
                   </Text>
@@ -2613,7 +2681,7 @@ export default function App() {
                 <View>
                   {taxData.pendingDARFs.length > 0 && (
                     <View style={styles.taxCardRed}>
-                      <Text style={styles.taxCardTitle}>⚠️ DARFs Pendentes</Text>
+                      <Text style={styles.taxCardTitle}>?? DARFs Pendentes</Text>
                       <Text style={styles.taxCardText}>
                         Você possui {taxData.pendingDARFs.length} DARF(s) a pagar:
                       </Text>
@@ -2624,7 +2692,7 @@ export default function App() {
                         
                         return (
                           <View key={index} style={styles.darfItem}>
-                            <Text style={styles.darfMonth}>📅 {monthName}</Text>
+                            <Text style={styles.darfMonth}>?? {monthName}</Text>
                             <Text style={styles.darfAmount}>Imposto: {formatCurrency(month.taxDue)}</Text>
                             <Text style={styles.darfDue}>
                               Vencimento: {new Date(month.dueDate).toLocaleDateString('pt-BR')}
@@ -2640,7 +2708,7 @@ export default function App() {
 
                   {taxData.needsDeclaration && isDeclarationPeriod && (
                     <View style={styles.taxCardYellow}>
-                      <Text style={styles.taxCardTitle}>📋 Período de Declaração</Text>
+                      <Text style={styles.taxCardTitle}>?? Período de Declaração</Text>
                       <Text style={styles.taxCardText}>
                         Estamos no período de declaração do IR (janeiro a abril).
                       </Text>
@@ -2649,12 +2717,12 @@ export default function App() {
                       </Text>
                       {taxData.totalPatrimony > 5000 && (
                         <Text style={styles.taxCardText}>
-                          ⚠️ Obrigatório declarar (patrimônio {'>'} R$ 5.000)
+                          ?? Obrigatório declarar (patrimônio {'>'} R$ 5.000)
                         </Text>
                       )}
                       {sales.length > 0 && (
                         <Text style={styles.taxCardText}>
-                          ⚠️ Obrigatório declarar (houve vendas no ano)
+                          ?? Obrigatório declarar (houve vendas no ano)
                         </Text>
                       )}
                     </View>
@@ -2664,7 +2732,7 @@ export default function App() {
 
               {taxData.taxMonths.length > 0 && (
                 <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>📊 Vendas Mensais</Text>
+                  <Text style={styles.sectionTitle}>?? Vendas Mensais</Text>
                   {taxData.taxMonths.map((month, index) => {
                     const monthName = new Date(parseInt(month.year), parseInt(month.month) - 1)
                       .toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
@@ -2688,16 +2756,16 @@ export default function App() {
                         </View>
                         {month.profit > 0 ? (
                           <View style={styles.taxDueContainer}>
-                            <Text style={styles.taxDueLabel}>💰 Imposto devido (15%):</Text>
+                            <Text style={styles.taxDueLabel}>?? Imposto devido (15%):</Text>
                             <Text style={styles.taxDueAmount}>{formatCurrency(month.taxDue)}</Text>
                             <Text style={styles.taxDueDate}>
                               Venc: {month.dueDate}
                             </Text>
                           </View>
                         ) : month.profit < 0 ? (
-                          <Text style={styles.taxExempt}>✅ Prejuízo pode compensar lucros no ano</Text>
+                          <Text style={styles.taxExempt}>? Prejuízo pode compensar lucros no ano</Text>
                         ) : (
-                          <Text style={styles.taxExempt}>➖ Sem lucro ou prejuízo</Text>
+                          <Text style={styles.taxExempt}>? Sem lucro ou prejuízo</Text>
                         )}
                       </View>
                     );
@@ -2707,7 +2775,7 @@ export default function App() {
 
               {taxData.patrimonyAssets.length > 0 && (
                 <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>📦 Bens e Direitos (31/12)</Text>
+                  <Text style={styles.sectionTitle}>?? Bens e Direitos (31/12)</Text>
                   <View style={styles.patrimonyCard}>
                     <Text style={styles.patrimonyTotal}>
                       Total: {formatCurrency(taxData.totalPatrimony)}
@@ -2736,18 +2804,42 @@ export default function App() {
           {/* Exportar Relatório */}
           {(taxData.fiscalYears?.length > 0 || taxData.taxMonths.length > 0 || taxData.patrimonyAssets.length > 0) && (
             <View style={styles.exportSection}>
-              <Text style={styles.exportTitle}>📤 Exportar Relatório</Text>
+              <Text style={styles.exportTitle}>?? Exportar Relatório</Text>
               <TouchableOpacity style={styles.exportButton} onPress={shareReport}>
-                <Text style={styles.exportButtonText}>📲 Compartilhar</Text>
+                <Text style={styles.exportButtonText}>?? Compartilhar</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.exportButton} onPress={copyReport}>
-                <Text style={styles.exportButtonText}>📋 Copiar</Text>
+                <Text style={styles.exportButtonText}>?? Copiar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.exportButton} onPress={exportRFReportToPDF}>
+                <Text style={styles.exportButtonText}>?? Exportar PDF</Text>
               </TouchableOpacity>
             </View>
           )}
 
+          {/* Ferramentas */}
+          <View style={styles.exportSection}>
+            <Text style={styles.exportTitle}>??? Ferramentas</Text>
+            <TouchableOpacity 
+              style={styles.exportButton} 
+              onPress={() => setShowTaxCalculator(true)}
+            >
+              <Text style={styles.exportButtonText}>?? Calculadora de Imposto</Text>
+            </TouchableOpacity>
+            
+            <View style={styles.darkModeToggle}>
+              <Text style={styles.darkModeText}>?? Modo Escuro</Text>
+              <Switch
+                value={isDarkMode}
+                onValueChange={setIsDarkMode}
+                trackColor={{ false: '#E8EAED', true: '#3498db' }}
+                thumbColor={isDarkMode ? '#fff' : '#f4f3f4'}
+              />
+            </View>
+          </View>
+
           <View style={styles.taxInfo}>
-            <Text style={styles.taxInfoTitle}>ℹ️ Informações Importantes</Text>
+            <Text style={styles.taxInfoTitle}>?? Informações Importantes</Text>
             <Text style={styles.taxInfoText}>
               • Exchanges Internacionais: 15% sobre QUALQUER ganho
             </Text>
@@ -2806,7 +2898,7 @@ export default function App() {
 
       {/* Filtros */}
       <View style={styles.filterContainer}>
-        <Text style={styles.filterTitle}>🔍 Filtros</Text>
+        <Text style={styles.filterTitle}>?? Filtros</Text>
         
         <View style={styles.filterRow}>
           <View style={styles.filterItem}>
@@ -2872,7 +2964,7 @@ export default function App() {
               }}
             >
               <Text style={styles.dateButtonText}>
-                {filterStartDate ? formatDate(filterStartDate) : '📅 Selecionar'}
+                {filterStartDate ? formatDate(filterStartDate) : '?? Selecionar'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -2890,7 +2982,7 @@ export default function App() {
               }}
             >
               <Text style={styles.dateButtonText}>
-                {filterEndDate ? formatDate(filterEndDate) : '📅 Selecionar'}
+                {filterEndDate ? formatDate(filterEndDate) : '?? Selecionar'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -2899,10 +2991,10 @@ export default function App() {
         {(filterCoin || filterStartDate || filterEndDate) && (
           <View style={styles.filterActionsContainer}>
             <TouchableOpacity style={styles.clearFilterButton} onPress={clearFilters}>
-              <Text style={styles.clearFilterText}>🗑️ Limpar Filtros</Text>
+              <Text style={styles.clearFilterText}>??? Limpar Filtros</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.exportButton} onPress={exportToExcel}>
-              <Text style={styles.exportButtonText}>📊 Exportar Excel</Text>
+              <Text style={styles.exportButtonText}>?? Exportar Excel</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -2911,12 +3003,12 @@ export default function App() {
       {/* Resumo do Período Filtrado */}
       {hasActiveFilters && (
         <View style={styles.summaryContainer}>
-          <Text style={styles.summaryTitle}>📊 Resumo do Período</Text>
+          <Text style={styles.summaryTitle}>?? Resumo do Período</Text>
           
           {/* Resumo de Compras */}
           {(transactionType === 'all' || transactionType === 'purchases') && purchaseSummary.length > 0 && (
             <View>
-              <Text style={styles.summarySubtitle}>💰 Compras</Text>
+              <Text style={styles.summarySubtitle}>?? Compras</Text>
               {purchaseSummary.map((item) => (
                 <View key={`purchase-${item.coin}`} style={styles.summaryCard}>
                   <View style={styles.summaryHeader}>
@@ -2943,7 +3035,7 @@ export default function App() {
           {/* Resumo de Vendas */}
           {(transactionType === 'all' || transactionType === 'sales') && salesSummary.length > 0 && (
             <View>
-              <Text style={styles.summarySubtitle}>💸 Vendas</Text>
+              <Text style={styles.summarySubtitle}>?? Vendas</Text>
               {salesSummary.map((item) => (
                 <View key={`sale-${item.coin}`} style={[styles.summaryCard, styles.salesSummaryCard]}>
                   <View style={styles.summaryHeader}>
@@ -2980,19 +3072,19 @@ export default function App() {
         {(transactionType === 'all' || transactionType === 'purchases') && (
           <View>
             {sortedPurchases.length > 0 && transactionType === 'all' && (
-              <Text style={styles.transactionTypeHeader}>💰 COMPRAS</Text>
+              <Text style={styles.transactionTypeHeader}>?? COMPRAS</Text>
             )}
             {sortedPurchases.map((item) => (
               <View key={`purchase-${item.id}`} style={styles.card}>
                 <View style={styles.cardHeader}>
                   <View style={styles.cardHeaderLeft}>
-                    <Text style={styles.transactionType}>💰 COMPRA</Text>
+                    <Text style={styles.transactionType}>?? COMPRA</Text>
                     <Text style={styles.coinName}>{item.coin}</Text>
                   </View>
                   <View style={{alignItems: 'flex-end'}}>
                     <Text style={styles.date}>{formatDate(item.date)}</Text>
                     {item.attachment && (
-                      <Text style={styles.attachmentBadge}>📎</Text>
+                      <Text style={styles.attachmentBadge}>??</Text>
                     )}
                   </View>
                 </View>
@@ -3022,7 +3114,7 @@ export default function App() {
                     style={styles.viewAttachmentButton}
                     onPress={() => viewAttachment(item.attachment!)}
                   >
-                    <Text style={styles.viewAttachmentButtonText}>📎 Ver Comprovante</Text>
+                    <Text style={styles.viewAttachmentButtonText}>?? Ver Comprovante</Text>
                   </TouchableOpacity>
                 )}
                 
@@ -3031,13 +3123,13 @@ export default function App() {
                     style={styles.editButton} 
                     onPress={() => handleEdit(item)}
                   >
-                    <Text style={styles.editButtonText}>✏️ Editar</Text>
+                    <Text style={styles.editButtonText}>?? Editar</Text>
                   </TouchableOpacity>
                   <TouchableOpacity 
                     style={styles.deleteButton} 
                     onPress={() => handleDelete(item.id)}
                   >
-                    <Text style={styles.deleteButtonText}>🗑️ Excluir</Text>
+                    <Text style={styles.deleteButtonText}>??? Excluir</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -3054,19 +3146,19 @@ export default function App() {
         {(transactionType === 'all' || transactionType === 'sales') && (
           <View>
             {sortedSales.length > 0 && transactionType === 'all' && (
-              <Text style={styles.transactionTypeHeader}>💸 VENDAS</Text>
+              <Text style={styles.transactionTypeHeader}>?? VENDAS</Text>
             )}
             {sortedSales.map((item) => (
               <View key={`sale-${item.id}`} style={[styles.card, styles.saleCard]}>
                 <View style={styles.cardHeader}>
                   <View style={styles.cardHeaderLeft}>
-                    <Text style={styles.transactionTypeSale}>💸 VENDA</Text>
+                    <Text style={styles.transactionTypeSale}>?? VENDA</Text>
                     <Text style={styles.coinName}>{item.coin}</Text>
                   </View>
                   <View style={{alignItems: 'flex-end'}}>
                     <Text style={styles.date}>{formatDate(item.date)}</Text>
                     {item.attachment && (
-                      <Text style={styles.attachmentBadge}>📎</Text>
+                      <Text style={styles.attachmentBadge}>??</Text>
                     )}
                   </View>
                 </View>
@@ -3102,7 +3194,7 @@ export default function App() {
                     style={styles.viewAttachmentButton}
                     onPress={() => viewAttachment(item.attachment!)}
                   >
-                    <Text style={styles.viewAttachmentButtonText}>📎 Ver Comprovante</Text>
+                    <Text style={styles.viewAttachmentButtonText}>?? Ver Comprovante</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -3153,9 +3245,9 @@ export default function App() {
         <View style={styles.exportModalOverlay}>
           <View style={styles.exportModalContainer}>
             <View style={styles.exportModalHeader}>
-              <Text style={styles.exportModalTitle}>📊 Relatório Gerado</Text>
+              <Text style={styles.exportModalTitle}>?? Relatório Gerado</Text>
               <TouchableOpacity onPress={() => setShowExportModal(false)}>
-                <Text style={styles.exportModalClose}>✕</Text>
+                <Text style={styles.exportModalClose}>?</Text>
               </TouchableOpacity>
             </View>
             
@@ -3165,7 +3257,7 @@ export default function App() {
             
             <View style={styles.exportModalFooter}>
               <Text style={styles.exportModalHint}>
-                📝 Copie o texto acima e cole no Excel, Google Sheets ou Word
+                ?? Copie o texto acima e cole no Excel, Google Sheets ou Word
               </Text>
               <TouchableOpacity 
                 style={styles.exportModalButton} 
@@ -3184,9 +3276,9 @@ export default function App() {
           <View style={styles.exportModalContainer}>
             <View style={styles.exportModalHeader}>
               <Text style={styles.exportModalTitle}>
-                {backupMode === 'menu' && '💾 Backup e Restauração'}
-                {backupMode === 'generate' && '📥 Gerar Backup'}
-                {backupMode === 'restore' && '📤 Restaurar Backup'}
+                {backupMode === 'menu' && '?? Backup e Restauração'}
+                {backupMode === 'generate' && '?? Gerar Backup'}
+                {backupMode === 'restore' && '?? Restaurar Backup'}
               </Text>
               <TouchableOpacity onPress={() => {
                 setShowBackupModal(false);
@@ -3194,7 +3286,7 @@ export default function App() {
                 setImportData('');
                 setBackupMode('menu');
               }}>
-                <Text style={styles.exportModalClose}>✕</Text>
+                <Text style={styles.exportModalClose}>?</Text>
               </TouchableOpacity>
             </View>
             
@@ -3209,7 +3301,7 @@ export default function App() {
                     style={styles.backupMenuButton} 
                     onPress={() => setBackupMode('generate')}
                   >
-                    <Text style={styles.backupMenuIcon}>📥</Text>
+                    <Text style={styles.backupMenuIcon}>??</Text>
                     <View style={styles.backupMenuTextContainer}>
                       <Text style={styles.backupMenuTitle}>Gerar Backup</Text>
                       <Text style={styles.backupMenuSubtitle}>
@@ -3222,7 +3314,7 @@ export default function App() {
                     style={styles.backupMenuButton} 
                     onPress={() => setBackupMode('restore')}
                   >
-                    <Text style={styles.backupMenuIcon}>📤</Text>
+                    <Text style={styles.backupMenuIcon}>??</Text>
                     <View style={styles.backupMenuTextContainer}>
                       <Text style={styles.backupMenuTitle}>Restaurar Backup</Text>
                       <Text style={styles.backupMenuSubtitle}>
@@ -3237,12 +3329,12 @@ export default function App() {
                 <View>
                   {backupData ? (
                     <View>
-                      <Text style={styles.backupSectionTitle}>✅ Backup Gerado com Sucesso!</Text>
+                      <Text style={styles.backupSectionTitle}>? Backup Gerado com Sucesso!</Text>
                       <Text style={styles.backupInfo}>
                         {purchases.length} compra(s) e {sales.length} venda(s)
                       </Text>
                       <Text style={styles.backupWarning}>
-                        ⚠️ IMPORTANTE: Este backup só existe nesta tela! Você precisa salvá-lo em um local seguro AGORA.
+                        ?? IMPORTANTE: Este backup só existe nesta tela! Você precisa salvá-lo em um local seguro AGORA.
                       </Text>
                       <Text style={styles.backupHint}>
                         Use os botões abaixo para copiar ou compartilhar:
@@ -3253,14 +3345,14 @@ export default function App() {
                           style={styles.backupShareButton} 
                           onPress={copyBackupToClipboard}
                         >
-                          <Text style={styles.backupShareButtonText}>📋 Copiar</Text>
+                          <Text style={styles.backupShareButtonText}>?? Copiar</Text>
                         </TouchableOpacity>
                         
                         <TouchableOpacity 
                           style={styles.backupShareButton} 
                           onPress={shareBackup}
                         >
-                          <Text style={styles.backupShareButtonText}>📤 Compartilhar</Text>
+                          <Text style={styles.backupShareButtonText}>?? Compartilhar</Text>
                         </TouchableOpacity>
                       </View>
 
@@ -3270,7 +3362,7 @@ export default function App() {
                       </ScrollView>
                       
                       <Text style={styles.backupSaveHint}>
-                        💡 Sugestões: Envie por WhatsApp para você mesmo, salve no Google Drive, ou envie por email.
+                        ?? Sugestões: Envie por WhatsApp para você mesmo, salve no Google Drive, ou envie por email.
                       </Text>
                     </View>
                   ) : (
@@ -3285,7 +3377,7 @@ export default function App() {
                         style={styles.backupActionButton} 
                         onPress={exportBackup}
                       >
-                        <Text style={styles.backupActionButtonText}>📥 Gerar Código do Backup</Text>
+                        <Text style={styles.backupActionButtonText}>?? Gerar Código do Backup</Text>
                       </TouchableOpacity>
                     </View>
                   )}
@@ -3311,7 +3403,7 @@ export default function App() {
                     onPress={importBackup}
                     disabled={!importData.trim()}
                   >
-                    <Text style={styles.backupActionButtonText}>📤 Importar Dados</Text>
+                    <Text style={styles.backupActionButtonText}>?? Importar Dados</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -3327,7 +3419,7 @@ export default function App() {
                     setImportData('');
                   }}
                 >
-                  <Text style={styles.backupBackButtonText}>⬅ Voltar</Text>
+                  <Text style={styles.backupBackButtonText}>? Voltar</Text>
                 </TouchableOpacity>
               )}
               <TouchableOpacity 
@@ -3357,7 +3449,7 @@ export default function App() {
                 setViewingAttachment(null);
               }}
             >
-              <Text style={styles.attachmentModalCloseText}>✕</Text>
+              <Text style={styles.attachmentModalCloseText}>?</Text>
             </TouchableOpacity>
             
             {viewingAttachment && (
@@ -3368,7 +3460,66 @@ export default function App() {
               />
             )}
             
-            <Text style={styles.attachmentModalTitle}>📎 Comprovante</Text>
+            <Text style={styles.attachmentModalTitle}>?? Comprovante</Text>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal da Calculadora de Imposto */}
+      <Modal transparent visible={showTaxCalculator} animationType="slide">
+        <View style={styles.calculatorModal}>
+          <View style={[styles.calculatorContent, isDarkMode && styles.darkCalculatorContent]}>
+            <Text style={[styles.calculatorTitle, isDarkMode && styles.darkCalculatorTitle]}>
+              ?? Calculadora de Imposto
+            </Text>
+            
+            <TextInput
+              style={[styles.calculatorInput, isDarkMode && styles.darkCalculatorInput]}
+              placeholder="Moeda (ex: BTC, ETH)"
+              value={calcCoin}
+              onChangeText={setCalcCoin}
+              autoCapitalize="characters"
+              placeholderTextColor={isDarkMode ? '#AEAEB2' : '#8E8E93'}
+            />
+            
+            <TextInput
+              style={[styles.calculatorInput, isDarkMode && styles.darkCalculatorInput]}
+              placeholder="Quantidade"
+              value={calcQuantity}
+              onChangeText={setCalcQuantity}
+              keyboardType="decimal-pad"
+              placeholderTextColor={isDarkMode ? '#AEAEB2' : '#8E8E93'}
+            />
+            
+            <TextInput
+              style={[styles.calculatorInput, isDarkMode && styles.darkCalculatorInput]}
+              placeholder="Preço de Venda (R$)"
+              value={calcSellPrice}
+              onChangeText={setCalcSellPrice}
+              keyboardType="decimal-pad"
+              placeholderTextColor={isDarkMode ? '#AEAEB2' : '#8E8E93'}
+            />
+            
+            <View style={styles.calculatorButtons}>
+              <TouchableOpacity
+                style={[styles.calculatorButton, styles.calculatorButtonCancel]}
+                onPress={() => {
+                  setShowTaxCalculator(false);
+                  setCalcCoin('');
+                  setCalcQuantity('');
+                  setCalcSellPrice('');
+                }}
+              >
+                <Text style={styles.calculatorButtonText}>Cancelar</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.calculatorButton}
+                onPress={calculateTaxBeforeSale}
+              >
+                <Text style={styles.calculatorButtonText}>Calcular</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -5073,7 +5224,7 @@ const styles = StyleSheet.create({
     color: '#34C759',
     letterSpacing: 0.2,
   },
-  declarationReason: {
+  declarationReasonAlt: {
     fontSize: 13,
     color: '#666',
     fontStyle: 'italic',
@@ -5291,4 +5442,103 @@ const styles = StyleSheet.create({
     marginTop: 16,
     letterSpacing: 0.3,
   },
+  // Estilos do Modo Escuro
+  darkContainer: {
+    flex: 1,
+    backgroundColor: '#1C1C1E',
+  },
+  darkCard: {
+    backgroundColor: '#2C2C2E',
+    borderColor: '#3A3A3C',
+  },
+  darkText: {
+    color: '#FFFFFF',
+  },
+  darkSubtext: {
+    color: '#AEAEB2',
+  },
+  // Estilos da Calculadora
+  calculatorModal: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  calculatorContent: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 24,
+    width: '90%',
+    maxWidth: 400,
+  },
+  calculatorTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#1C1C1E',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  calculatorInput: {
+    backgroundColor: '#F2F2F7',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    fontSize: 16,
+    borderWidth: 1.5,
+    borderColor: '#E8EAED',
+  },
+  calculatorButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 16,
+  },
+  calculatorButton: {
+    flex: 1,
+    backgroundColor: '#3498db',
+    borderRadius: 12,
+    padding: 14,
+    marginHorizontal: 6,
+    alignItems: 'center',
+  },
+  calculatorButtonCancel: {
+    backgroundColor: '#95a5a6',
+  },
+  calculatorButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  // Estilos Modo Escuro - Calculadora
+  darkCalculatorContent: {
+    backgroundColor: '#2C2C2E',
+  },
+  darkCalculatorTitle: {
+    color: '#FFFFFF',
+  },
+  darkCalculatorInput: {
+    backgroundColor: '#3A3A3C',
+    borderColor: '#48484A',
+    color: '#FFFFFF',
+  },
+
+  // Dark Mode Toggle
+  darkModeToggle: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#F2F2F7',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 12,
+  },
+  darkModeText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1C1C1E',
+  },
 });
+
+
+
+
+
