@@ -19,8 +19,6 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as ImagePicker from 'expo-image-picker';
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
 
 interface CryptoPurchase {
   id: string;
@@ -382,28 +380,7 @@ export default function App() {
     }
   };
 
-  // Exportar Relatório RF para PDF
-  const exportRFReportToPDF = async () => {
-    try {
-      const taxData = calculateTaxReport();
-      
-      let html = '<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><style>body{font-family:Arial;padding:20px}h1{color:#2c3e50}h2{color:#34495e;margin-top:20px}.section{border:1px solid #ddd;padding:15px;margin:15px 0;border-radius:5px}.label{font-weight:bold}</style></head><body><h1> Relatório Receita Federal</h1><p><strong>Gerado em:</strong> ' + new Date().toLocaleDateString('pt-BR') + '</p><hr/>';
-      
-      if (taxData.fiscalYears && taxData.fiscalYears.length > 0) {
-        taxData.fiscalYears.forEach((year: any) => {
-          html += '<div class=\"section\"><h2> Ano ' + year.year + '</h2><p><span class=\"label\">Resultado:</span> ' + formatCurrency(year.netResult) + '</p><p><span class=\"label\">Imposto (15%):</span> ' + formatCurrency(year.taxDue) + '</p></div>';
-        });
-      }
-      
-      html += '</body></html>';
 
-      const { uri } = await Print.printToFileAsync({ html });
-      await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
-      Alert.alert(' Sucesso', 'PDF exportado!');
-    } catch (error) {
-      Alert.alert('Erro', 'Não foi possível exportar o PDF');
-    }
-  };
   const takePicture = async (type: 'purchase' | 'sale') => {
     const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
     
@@ -2810,9 +2787,6 @@ export default function App() {
               </TouchableOpacity>
               <TouchableOpacity style={styles.exportButton} onPress={copyReport}>
                 <Text style={styles.exportButtonText}>?? Copiar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.exportButton} onPress={exportRFReportToPDF}>
-                <Text style={styles.exportButtonText}>?? Exportar PDF</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -5537,6 +5511,8 @@ const styles = StyleSheet.create({
     color: '#1C1C1E',
   },
 });
+
+
 
 
 
