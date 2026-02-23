@@ -41,11 +41,15 @@ interface CryptoSale {
   dollarRate: number;
   profit: number;
   attachment?: string;
+  isExempt?: boolean;
+  exchangeType?: 'nacional' | 'internacional';
+  taxPaid?: number;
 }
 
 const STORAGE_KEY = '@crypto_purchases';
 const SALES_STORAGE_KEY = '@crypto_sales';
 const TAX_LOSSES_KEY = '@crypto_tax_losses';
+const HIDE_VALUES_KEY = '@hide_values_pref';
 
 const formatCurrency = (value: number): string => {
   return new Intl.NumberFormat('en-US', {
@@ -157,6 +161,10 @@ export default function App() {
   const [showAttachmentModal, setShowAttachmentModal] = useState(false);
   
   // Novos estados v22
+  const [editingSaleId, setEditingSaleId] = useState<string | null>(null);
+  const [sellIsExempt, setSellIsExempt] = useState(false);
+  const [sellExchangeType, setSellExchangeType] = useState<'nacional' | 'internacional'>('internacional');
+  const [sellTaxPaid, setSellTaxPaid] = useState('');
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [showTaxCalculator, setShowTaxCalculator] = useState(false);
   const [calcCoin, setCalcCoin] = useState('');
@@ -224,6 +232,10 @@ export default function App() {
       if (lossesData) {
         setTaxLosses(JSON.parse(lossesData));
       }
+      const hideValData = await AsyncStorage.getItem(HIDE_VALUES_KEY);
+      if (hideValData !== null) {
+        setHideValues(JSON.parse(hideValData));
+      }
     } catch (error) {
       console.error('Erro ao carregar:', error);
     } finally {
@@ -254,6 +266,12 @@ export default function App() {
     } catch (error) {
       console.error('Erro ao salvar prejuízos:', error);
     }
+  };
+
+  const toggleHideValues = async () => {
+    const newValue = !hideValues;
+    setHideValues(newValue);
+    await AsyncStorage.setItem(HIDE_VALUES_KEY, JSON.stringify(newValue));
   };
 
   // Determina o código da Receita Federal para cada cripto
@@ -803,6 +821,15 @@ export default function App() {
       const saleBRL = sale.priceSold * sale.dollarRate;
       const costBRL = (sale.priceSold - sale.profit) * sale.dollarRate;
       
+      // Vendas isentas (corretora nacional < R$35k) nao entram no calculo de imposto
+      if (sale.isExempt) {
+        monthlyData.set(monthKey, {
+          ...existing,
+          transactions: [...existing.transactions, sale],
+        });
+        return;
+      }
+      
       monthlyData.set(monthKey, {
         sales: existing.sales + saleBRL,
         cost: existing.cost + costBRL,
@@ -1199,7 +1226,7 @@ export default function App() {
         .filter(p => p.coin === coinUpper)
         .reduce((sum, p) => sum + p.quantity, 0);
       const totalSold = sales
-        .filter(s => s.coin === coinUpper)
+        .filter(s => s.coin === coinUpper && s.id !== editingSaleId)
         .reduce((sum, s) => sum + s.quantity, 0);
       const available = totalBought - totalSold;
 
@@ -1217,33 +1244,68 @@ export default function App() {
         .reduce((sum, p) => sum + p.pricePaid, 0) / totalBought;
       
       const profit = price - (avgPurchasePrice * qty);
+      const tPaid = sellTaxPaid ? parseFloat(sellTaxPaid.replace(',', '.')) : undefined;
 
-      const newSale: CryptoSale = {
-        id: Date.now().toString(),
-        coin: coinUpper,
-        quantity: qty,
-        priceSold: price,
-        date: sellDate.toISOString(),
-        pricePerUnit: price / qty,
-        dollarRate: dRate,
-        profit: profit,
-        ...(sellAttachment && { attachment: sellAttachment }),
-      };
+      if (editingSaleId) {
+        // Editar venda existente
+        const updated = sales.map(s =>
+          s.id === editingSaleId
+            ? {
+                ...s,
+                coin: coinUpper,
+                quantity: qty,
+                priceSold: price,
+                date: sellDate.toISOString(),
+                pricePerUnit: price / qty,
+                dollarRate: dRate,
+                profit: profit,
+                isExempt: sellIsExempt,
+                exchangeType: sellExchangeType,
+                ...(tPaid !== undefined && !isNaN(tPaid) && { taxPaid: tPaid }),
+                ...(sellAttachment && { attachment: sellAttachment }),
+              }
+            : s
+        );
+        await saveSales(updated);
+        setSales(updated);
 
-      const updated = [...sales, newSale];
-      await saveSales(updated);
-      setSales(updated);
+        const tempTaxData = calculateTaxReport();
+        if (tempTaxData.newTaxLosses && Object.keys(tempTaxData.newTaxLosses).length > 0) {
+          await saveTaxLosses(tempTaxData.newTaxLosses);
+        }
 
-      // Atualizar prejuízos fiscais após nova venda
-      const tempTaxData = calculateTaxReport();
-      if (tempTaxData.newTaxLosses && Object.keys(tempTaxData.newTaxLosses).length > 0) {
-        await saveTaxLosses(tempTaxData.newTaxLosses);
+        Alert.alert('Sucesso!', 'Venda atualizada com sucesso!');
+      } else {
+        // Nova venda
+        const newSale: CryptoSale = {
+          id: Date.now().toString(),
+          coin: coinUpper,
+          quantity: qty,
+          priceSold: price,
+          date: sellDate.toISOString(),
+          pricePerUnit: price / qty,
+          dollarRate: dRate,
+          profit: profit,
+          isExempt: sellIsExempt,
+          exchangeType: sellExchangeType,
+          ...(tPaid !== undefined && !isNaN(tPaid) && { taxPaid: tPaid }),
+          ...(sellAttachment && { attachment: sellAttachment }),
+        };
+
+        const updated = [...sales, newSale];
+        await saveSales(updated);
+        setSales(updated);
+
+        const tempTaxData = calculateTaxReport();
+        if (tempTaxData.newTaxLosses && Object.keys(tempTaxData.newTaxLosses).length > 0) {
+          await saveTaxLosses(tempTaxData.newTaxLosses);
+        }
+
+        Alert.alert(
+          'Sucesso!',
+          `Venda registrada!\n${profit >= 0 ? 'Lucro' : 'Prejuízo'}: ${formatCurrency(Math.abs(profit))}`
+        );
       }
-
-      Alert.alert(
-        'Sucesso!',
-        `Venda registrada!\n${profit >= 0 ? 'Lucro' : 'Prejuízo'}: ${formatCurrency(Math.abs(profit))}`
-      );
 
       setSellCoin('');
       setSellQuantity('');
@@ -1251,6 +1313,10 @@ export default function App() {
       setSellDollarRate('');
       setSellDate(new Date());
       setSellAttachment(null);
+      setSellIsExempt(false);
+      setSellExchangeType('internacional');
+      setSellTaxPaid('');
+      setEditingSaleId(null);
       setScreen('home');
     } catch (error) {
       Alert.alert('Erro', 'Não foi possível registrar a venda');
@@ -1277,6 +1343,44 @@ export default function App() {
             }
             
             Alert.alert('Sucesso', 'Compra excluída!');
+          } catch (error) {
+            Alert.alert('Erro', 'Não foi possível excluir');
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleEditSale = (sale: CryptoSale) => {
+    setSellCoin(sale.coin);
+    setSellQuantity(sale.quantity.toString());
+    setSellPrice(sale.priceSold.toString());
+    setSellDollarRate(sale.dollarRate.toString());
+    setSellDate(new Date(sale.date));
+    setSellAttachment(sale.attachment || null);
+    setSellIsExempt(sale.isExempt || false);
+    setSellExchangeType((sale.exchangeType as 'nacional' | 'internacional') || 'internacional');
+    setSellTaxPaid(sale.taxPaid?.toString() || '');
+    setEditingSaleId(sale.id);
+    setScreen('sell');
+  };
+
+  const handleDeleteSale = async (id: string) => {
+    Alert.alert('Confirmar', 'Deseja excluir esta venda?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Excluir',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            const updated = sales.filter((s) => s.id !== id);
+            await saveSales(updated);
+            setSales(updated);
+            const tempTaxData = calculateTaxReport();
+            if (tempTaxData.newTaxLosses && Object.keys(tempTaxData.newTaxLosses).length > 0) {
+              await saveTaxLosses(tempTaxData.newTaxLosses);
+            }
+            Alert.alert('Sucesso', 'Venda excluída!');
           } catch (error) {
             Alert.alert('Erro', 'Não foi possível excluir');
           }
@@ -1499,7 +1603,7 @@ export default function App() {
       <Text style={styles.headerTitle}>CapitalChain</Text>
       <TouchableOpacity 
         style={styles.hideButton} 
-        onPress={() => setHideValues(!hideValues)}
+        onPress={toggleHideValues}
       >
         <Text style={styles.hideButtonText}>{hideValues ? '👁' : '👁️'}</Text>
       </TouchableOpacity>
@@ -1591,7 +1695,7 @@ export default function App() {
           </View>
           <TouchableOpacity 
             style={styles.hideButton} 
-            onPress={() => setHideValues(!hideValues)}
+            onPress={toggleHideValues}
           >
             <Text style={styles.hideButtonText}>{hideValues ? '👁' : '👁️'}</Text>
           </TouchableOpacity>
@@ -1865,7 +1969,7 @@ export default function App() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Vender Cripto</Text>
+          <Text style={styles.headerTitle}>{editingSaleId ? 'Editar Venda' : 'Vender Cripto'}</Text>
         </View>
 
         <ScrollView style={styles.content}>
@@ -1962,6 +2066,59 @@ export default function App() {
                 </View>
               )}
 
+              {/* Tipo de Corretora */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Tipo de Corretora</Text>
+                <View style={styles.viewModeToggle}>
+                  <TouchableOpacity
+                    style={[styles.toggleButton, sellExchangeType === 'internacional' && styles.toggleButtonActive]}
+                    onPress={() => { setSellExchangeType('internacional'); setSellIsExempt(false); }}
+                  >
+                    <Text style={[styles.toggleButtonText, sellExchangeType === 'internacional' && styles.toggleButtonTextActive]}>
+                      🌐 Internacional
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.toggleButton, sellExchangeType === 'nacional' && styles.toggleButtonActive]}
+                    onPress={() => setSellExchangeType('nacional')}
+                  >
+                    <Text style={[styles.toggleButtonText, sellExchangeType === 'nacional' && styles.toggleButtonTextActive]}>
+                      🇧🇷 Nacional
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Isenção fiscal (apenas para corretora nacional) */}
+              {sellExchangeType === 'nacional' && (
+                <View style={styles.switchRow}>
+                  <View style={styles.switchInfo}>
+                    <Text style={styles.switchLabel}>Isento de Imposto</Text>
+                    <Text style={styles.switchHint}>Vendas nacionais {'<'} R$ 35.000 no mês</Text>
+                  </View>
+                  <Switch
+                    value={sellIsExempt}
+                    onValueChange={setSellIsExempt}
+                    trackColor={{ false: '#E8EAED', true: '#667eea' }}
+                    thumbColor={sellIsExempt ? '#fff' : '#f4f3f4'}
+                  />
+                </View>
+              )}
+
+              {/* Imposto pago via DARF (quando não isento) */}
+              {!sellIsExempt && (
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Imposto Pago via DARF (R$) (opcional)</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="0.00"
+                    value={sellTaxPaid}
+                    onChangeText={setSellTaxPaid}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+              )}
+
               <View style={styles.attachmentSection}>
                 <Text style={styles.attachmentLabel}>📎 Comprovante (opcional)</Text>
                 <Text style={styles.attachmentHint}>
@@ -2010,8 +2167,29 @@ export default function App() {
               </View>
 
               <TouchableOpacity style={styles.sellButton} onPress={handleSellCrypto}>
-                <Text style={styles.saveButtonText}>✅ Registrar Venda</Text>
+                <Text style={styles.saveButtonText}>{editingSaleId ? '✅ Atualizar Venda' : '✅ Registrar Venda'}</Text>
               </TouchableOpacity>
+
+              {editingSaleId && (
+                <TouchableOpacity
+                  style={styles.cancelEditButton}
+                  onPress={() => {
+                    setSellCoin('');
+                    setSellQuantity('');
+                    setSellPrice('');
+                    setSellDollarRate('');
+                    setSellDate(new Date());
+                    setSellAttachment(null);
+                    setSellIsExempt(false);
+                    setSellExchangeType('internacional');
+                    setSellTaxPaid('');
+                    setEditingSaleId(null);
+                    setScreen('history');
+                  }}
+                >
+                  <Text style={styles.cancelEditButtonText}>Cancelar Edição</Text>
+                </TouchableOpacity>
+              )}
             </>
           )}
         </ScrollView>
@@ -2551,6 +2729,90 @@ export default function App() {
                           </View>
                         </View>
                         
+                        {/* Ganhos de Capital - Formato Receita Federal */}
+                        {(() => {
+                          const yearSales = sales.filter(s => new Date(s.date).getFullYear().toString() === year.year);
+                          if (yearSales.length === 0) return null;
+                          const totalTaxPaidYear = yearSales.reduce((sum, s) => sum + (s.taxPaid || 0), 0);
+                          return (
+                            <View style={styles.detailSection}>
+                              <View style={styles.rfHeaderRow}>
+                                <Text style={styles.detailSectionTitle}>📋 Ganhos de Capital (RF)</Text>
+                                <TouchableOpacity
+                                  style={styles.copyButton}
+                                  onPress={async () => {
+                                    let text = `GANHOS DE CAPITAL - ANO ${year.year}\n\n`;
+                                    yearSales.forEach((s, i) => {
+                                      const valueBRL = s.priceSold * s.dollarRate;
+                                      const costBRL = (s.priceSold - s.profit) * s.dollarRate;
+                                      const gainBRL = s.profit * s.dollarRate;
+                                      text += `${i + 1}. ${new Date(s.date).toLocaleDateString('pt-BR')} — ${s.coin}\n`;
+                                      text += `   Tipo: ${s.exchangeType === 'nacional' ? 'Nacional' : 'Internacional'}\n`;
+                                      text += `   Qtd alienada: ${formatQuantity(s.quantity)}\n`;
+                                      text += `   Valor de alienação: R$ ${valueBRL.toFixed(2)}\n`;
+                                      text += `   Custo de aquisição: R$ ${costBRL.toFixed(2)}\n`;
+                                      text += `   ${gainBRL >= 0 ? 'Ganho' : 'Perda'} de capital: R$ ${Math.abs(gainBRL).toFixed(2)}\n`;
+                                      text += `   Isento: ${s.isExempt ? 'Sim (Nacional < R$ 35.000/mês)' : 'Não'}\n`;
+                                      if (s.taxPaid && s.taxPaid > 0) text += `   Imposto pago (DARF): R$ ${s.taxPaid.toFixed(2)}\n`;
+                                      text += '\n';
+                                    });
+                                    if (totalTaxPaidYear > 0) {
+                                      text += `Total imposto pago no ano: R$ ${totalTaxPaidYear.toFixed(2)}\n`;
+                                    }
+                                    await Clipboard.setString(text);
+                                    Alert.alert('✅ Copiado!', 'Ganhos de Capital copiados para a área de transferência');
+                                  }}
+                                >
+                                  <Text style={styles.copyButtonText}>📋 Copiar</Text>
+                                </TouchableOpacity>
+                              </View>
+
+                              {yearSales.map((s, idx) => {
+                                const valueBRL = s.priceSold * s.dollarRate;
+                                const costBRL = (s.priceSold - s.profit) * s.dollarRate;
+                                const gainBRL = s.profit * s.dollarRate;
+                                return (
+                                  <View key={idx} style={[styles.assetItem, { borderLeftWidth: 3, borderLeftColor: gainBRL >= 0 ? '#34C759' : '#FF3B30' }]}>
+                                    <Text style={[styles.assetCoin, { color: '#1C1C1E' }]}>
+                                      {new Date(s.date).toLocaleDateString('pt-BR')} — {s.coin}
+                                      {s.isExempt ? '  ✅ Isento' : ''}
+                                    </Text>
+                                    <Text style={styles.assetQuantity}>
+                                      Corretora: {s.exchangeType === 'nacional' ? '🇧🇷 Nacional' : '🌐 Internacional'}
+                                    </Text>
+                                    <Text style={styles.assetQuantity}>
+                                      Qtd alienada: {formatQuantity(s.quantity)}
+                                    </Text>
+                                    <Text style={styles.assetCost}>
+                                      Valor de alienação: R$ {valueBRL.toFixed(2)}
+                                    </Text>
+                                    <Text style={styles.assetCost}>
+                                      Custo de aquisição: R$ {costBRL.toFixed(2)}
+                                    </Text>
+                                    <Text style={[styles.assetTotal, { color: gainBRL >= 0 ? '#34C759' : '#FF3B30' }]}>
+                                      {gainBRL >= 0 ? 'Ganho' : 'Perda'}: R$ {Math.abs(gainBRL).toFixed(2)}
+                                    </Text>
+                                    {s.taxPaid !== undefined && s.taxPaid > 0 && (
+                                      <Text style={[styles.assetTotal, { color: '#667eea' }]}>
+                                        Imposto pago (DARF): R$ {s.taxPaid.toFixed(2)}
+                                      </Text>
+                                    )}
+                                  </View>
+                                );
+                              })}
+
+                              {totalTaxPaidYear > 0 && (
+                                <View style={styles.detailRow}>
+                                  <Text style={styles.detailLabelBold}>Total imposto pago no ano:</Text>
+                                  <Text style={[styles.detailValueBold, { color: '#667eea' }]}>
+                                    R$ {totalTaxPaidYear.toFixed(2)}
+                                  </Text>
+                                </View>
+                              )}
+                            </View>
+                          );
+                        })()}
+
                         {/* Compensação de Prejuízos */}
                         {hadCompensation && (
                           <View style={[styles.detailSection, styles.compensationSection]}>
@@ -3207,6 +3469,25 @@ export default function App() {
                     {formatCurrency(Math.abs(item.profit))}
                   </Text>
                 </View>
+
+                {item.exchangeType && (
+                  <View style={styles.row}>
+                    <Text style={styles.label}>Corretora:</Text>
+                    <Text style={styles.value}>
+                      {item.exchangeType === 'nacional' ? '🇧🇷 Nacional' : '🌐 Internacional'}
+                      {item.isExempt ? ' ✅ Isento' : ''}
+                    </Text>
+                  </View>
+                )}
+
+                {item.taxPaid !== undefined && item.taxPaid > 0 && (
+                  <View style={styles.row}>
+                    <Text style={styles.label}>Imposto Pago:</Text>
+                    <Text style={[styles.value, { color: '#667eea' }]}>
+                      R$ {item.taxPaid.toFixed(2)}
+                    </Text>
+                  </View>
+                )}
                 
                 {item.attachment && (
                   <TouchableOpacity 
@@ -3216,6 +3497,21 @@ export default function App() {
                     <Text style={styles.viewAttachmentButtonText}>📷 Ver Comprovante</Text>
                   </TouchableOpacity>
                 )}
+
+                <View style={styles.actionButtons}>
+                  <TouchableOpacity
+                    style={styles.editButton}
+                    onPress={() => handleEditSale(item)}
+                  >
+                    <Text style={styles.editButtonText}>✏️ Editar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.deleteButton}
+                    onPress={() => handleDeleteSale(item.id)}
+                  >
+                    <Text style={styles.deleteButtonText}>🗑️ Excluir</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             ))}
             {sortedSales.length === 0 && transactionType === 'sales' && (
@@ -5572,6 +5868,32 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#1C1C1E',
+  },
+  switchRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FD',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1.5,
+    borderColor: '#E8EAED',
+  },
+  switchInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  switchLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginBottom: 2,
+  },
+  switchHint: {
+    fontSize: 12,
+    color: '#8E8E93',
+    fontWeight: '500',
   },
 });
 
