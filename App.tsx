@@ -1508,30 +1508,25 @@ export default function App() {
 
   const renderTabBar = () => (
     <View style={styles.tabBar}>
-      <TouchableOpacity style={styles.tab} onPress={() => setScreen('home')}>
-        <Text style={screen === 'home' ? styles.tabTextActive : styles.tabText}>
-          🏠{'\n'}Início
-        </Text>
+      <TouchableOpacity style={[styles.tab, screen === 'home' && styles.tabActive]} onPress={() => setScreen('home')}>
+        <Text style={styles.tabIcon}>🏠</Text>
+        <Text style={screen === 'home' ? styles.tabTextActive : styles.tabText}>Início</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={styles.tab} onPress={() => setScreen('add')}>
-        <Text style={screen === 'add' ? styles.tabTextActive : styles.tabText}>
-          ➕{'\n'}Comprar
-        </Text>
+      <TouchableOpacity style={[styles.tab, screen === 'add' && styles.tabActive]} onPress={() => setScreen('add')}>
+        <Text style={styles.tabIcon}>➕</Text>
+        <Text style={screen === 'add' ? styles.tabTextActive : styles.tabText}>Comprar</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={styles.tab} onPress={() => setScreen('sell')}>
-        <Text style={screen === 'sell' ? styles.tabTextActive : styles.tabText}>
-          💱{'\n'}Vender
-        </Text>
+      <TouchableOpacity style={[styles.tab, screen === 'sell' && styles.tabActive]} onPress={() => setScreen('sell')}>
+        <Text style={styles.tabIcon}>💱</Text>
+        <Text style={screen === 'sell' ? styles.tabTextActive : styles.tabText}>Vender</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={styles.tab} onPress={() => setScreen('history')}>
-        <Text style={screen === 'history' ? styles.tabTextActive : styles.tabText}>
-          📋{'\n'}Histórico
-        </Text>
+      <TouchableOpacity style={[styles.tab, screen === 'history' && styles.tabActive]} onPress={() => setScreen('history')}>
+        <Text style={styles.tabIcon}>📋</Text>
+        <Text style={screen === 'history' ? styles.tabTextActive : styles.tabText}>Histórico</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={styles.tab} onPress={() => setScreen('taxes')}>
-        <Text style={screen === 'taxes' ? styles.tabTextActive : styles.tabText}>
-          💼{'\n'}Impostos
-        </Text>
+      <TouchableOpacity style={[styles.tab, screen === 'taxes' && styles.tabActive]} onPress={() => setScreen('taxes')}>
+        <Text style={styles.tabIcon}>💼</Text>
+        <Text style={screen === 'taxes' ? styles.tabTextActive : styles.tabText}>Impostos</Text>
       </TouchableOpacity>
     </View>
   );
@@ -3801,8 +3796,8 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#fff',
     borderRadius: 18,
-    padding: 18,
-    marginBottom: 16,
+    padding: 20,
+    marginBottom: 20,
     elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -3937,14 +3932,14 @@ const styles = StyleSheet.create({
   },
   actionButtons: {
     flexDirection: 'row',
-    marginTop: 16,
-    gap: 12,
+    marginTop: 20,
+    gap: 14,
   },
   editButton: {
     flex: 1,
     backgroundColor: '#007AFF',
-    padding: 14,
-    borderRadius: 12,
+    padding: 16,
+    borderRadius: 14,
     alignItems: 'center',
     elevation: 3,
     shadowColor: '#007AFF',
@@ -3960,8 +3955,8 @@ const styles = StyleSheet.create({
   deleteButton: {
     flex: 1,
     backgroundColor: '#FF3B30',
-    padding: 14,
-    borderRadius: 12,
+    padding: 16,
+    borderRadius: 14,
     alignItems: 'center',
     elevation: 3,
     shadowColor: '#FF3B30',
@@ -3977,33 +3972,43 @@ const styles = StyleSheet.create({
   tabBar: {
     flexDirection: 'row',
     backgroundColor: '#fff',
-    borderTopWidth: 0,
-    paddingTop: 12,
-    paddingBottom: 28,
-    elevation: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F3F6',
+    paddingTop: 8,
+    paddingBottom: 32,
+    paddingHorizontal: 6,
+    elevation: 12,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
   },
   tab: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
     alignItems: 'center',
+    borderRadius: 14,
+    marginHorizontal: 2,
+  },
+  tabActive: {
+    backgroundColor: '#EEF1FD',
+  },
+  tabIcon: {
+    fontSize: 22,
+    marginBottom: 4,
   },
   tabText: {
-    fontSize: 11,
+    fontSize: 10,
     color: '#8E8E93',
     textAlign: 'center',
     fontWeight: '500',
-    marginTop: 4,
   },
   tabTextActive: {
-    fontSize: 11,
+    fontSize: 10,
     color: '#667eea',
     fontWeight: '700',
     textAlign: 'center',
-    marginTop: 4,
   },
   emptyState: {
     padding: 50,
@@ -4093,8 +4098,8 @@ const styles = StyleSheet.create({
   },
   filterActionsContainer: {
     flexDirection: 'row',
-    gap: 12,
-    marginTop: 8,
+    gap: 16,
+    marginTop: 14,
   },
   clearFilterButton: {
     flex: 1,
@@ -4308,7 +4313,7 @@ const styles = StyleSheet.create({
   },
   datePickerButtons: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 16,
   },
   datePickerCancelButton: {
     flex: 1,
@@ -4579,8 +4584,8 @@ const styles = StyleSheet.create({
   },
   backupActionsRow: {
     flexDirection: 'row',
-    gap: 12,
-    marginVertical: 18,
+    gap: 16,
+    marginVertical: 20,
   },
   backupShareButton: {
     flex: 1,
@@ -4933,10 +4938,10 @@ const styles = StyleSheet.create({
   },
   section: {
     backgroundColor: '#fff',
-    padding: 18,
+    padding: 20,
     borderRadius: 16,
-    marginTop: 12,
-    marginBottom: 18,
+    marginTop: 16,
+    marginBottom: 24,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -4990,7 +4995,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8F9FD',
     borderRadius: 12,
     padding: 4,
-    marginBottom: 18,
+    marginBottom: 24,
     borderWidth: 1.5,
     borderColor: '#E8EAED',
   },
@@ -5027,8 +5032,8 @@ const styles = StyleSheet.create({
   fiscalYearCard: {
     backgroundColor: '#fff',
     borderRadius: 18,
-    padding: 18,
-    marginBottom: 18,
+    padding: 20,
+    marginBottom: 22,
     borderWidth: 2,
     borderColor: '#E8EAED',
     elevation: 3,
@@ -5102,15 +5107,15 @@ const styles = StyleSheet.create({
   fiscalYearDetails: {
     backgroundColor: '#F8F9FD',
     borderRadius: 14,
-    padding: 18,
-    marginTop: 14,
-    marginBottom: 6,
+    padding: 20,
+    marginTop: 18,
+    marginBottom: 10,
   },
   detailSection: {
     backgroundColor: '#fff',
     borderRadius: 14,
-    padding: 16,
-    marginBottom: 14,
+    padding: 18,
+    marginBottom: 18,
   },
   compensationSection: {
     backgroundColor: '#FFF3E0',
@@ -5191,17 +5196,18 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   declarationReason: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#636366',
-    marginBottom: 6,
-    lineHeight: 20,
-    fontWeight: '500',
+    marginTop: 8,
+    marginBottom: 2,
+    lineHeight: 21,
+    fontWeight: '400',
   },
   assetsDetail: {
-    marginTop: 14,
-    padding: 14,
+    marginTop: 18,
+    padding: 16,
     backgroundColor: '#F8F9FD',
-    borderRadius: 12,
+    borderRadius: 14,
   },
   assetsDetailTitle: {
     fontSize: 14,
@@ -5212,16 +5218,16 @@ const styles = StyleSheet.create({
   },
   assetItem: {
     backgroundColor: '#fff',
-    padding: 14,
-    borderRadius: 10,
-    marginBottom: 10,
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 14,
     borderLeftWidth: 4,
     borderLeftColor: '#667eea',
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
+    shadowColor: '#667eea',
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
-    shadowRadius: 2,
+    shadowRadius: 4,
   },
   assetCoin: {
     fontSize: 15,
@@ -5263,16 +5269,22 @@ const styles = StyleSheet.create({
   },
   copyButton: {
     backgroundColor: '#667eea',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#667eea',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
   },
   copyButtonText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
+    letterSpacing: 0.2,
   },
   monthDetailCard: {
     backgroundColor: '#F8F9FD',
@@ -5331,7 +5343,7 @@ const styles = StyleSheet.create({
   },
   attachmentButtons: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 16,
     justifyContent: 'center',
   },
   attachmentButton: {
@@ -5514,7 +5526,8 @@ const styles = StyleSheet.create({
   calculatorButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 16,
+    marginTop: 20,
+    gap: 12,
   },
   calculatorButton: {
     flex: 1,
