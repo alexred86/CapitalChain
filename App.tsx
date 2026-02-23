@@ -852,18 +852,21 @@ export default function App() {
 
     // FUNÇÃO: Calcular patrimônio em uma data específica
     const calculatePatrimonyAtDate = (targetDate: Date) => {
-      const coinPatrimony = new Map<string, { quantity: number; averageCost: number }>();
+      const coinPatrimony = new Map<string, { quantity: number; averageCost: number; weightedDollarRate: number }>();
       
       // Processar compras até a data alvo
       purchases.forEach((p) => {
         const purchaseDate = new Date(p.date);
         if (purchaseDate <= targetDate) {
-          const existing = coinPatrimony.get(p.coin) || { quantity: 0, averageCost: 0 };
+          const existing = coinPatrimony.get(p.coin) || { quantity: 0, averageCost: 0, weightedDollarRate: 0 };
           const newQuantity = existing.quantity + p.quantity;
           
           if (newQuantity > 0) {
             const newAverageCost = ((existing.averageCost * existing.quantity) + (p.pricePaid * p.dollarRate)) / newQuantity;
-            coinPatrimony.set(p.coin, { quantity: newQuantity, averageCost: newAverageCost });
+            const newWeightedDollarRate = existing.quantity === 0
+              ? p.dollarRate
+              : ((existing.weightedDollarRate * existing.quantity) + (p.dollarRate * p.quantity)) / newQuantity;
+            coinPatrimony.set(p.coin, { quantity: newQuantity, averageCost: newAverageCost, weightedDollarRate: newWeightedDollarRate });
           }
         }
       });
@@ -895,6 +898,7 @@ export default function App() {
             quantity: data.quantity,
             averageCost: data.averageCost,
             totalCost,
+            averageDollarRate: data.weightedDollarRate || 0,
           });
         }
       });
@@ -2338,7 +2342,7 @@ export default function App() {
                                           fullText += `${asset.coin} — (Código ${code})\n`;
                                           fullText += `Situação em 31/12/${prevYear}: ${formatCurrency(prevValue)}\n`;
                                           fullText += `Situação em 31/12/${year.year}: ${formatCurrency(asset.totalCost)}\n`;
-                                          fullText += `Aquisição de ${formatQuantity(asset.quantity)} ${asset.coin} realizada ao longo de ${year.year} em corretora internacional, utilizando USDT e recursos próprios. Valores convertidos para BRL conforme cotação do dólar da data de aquisição (R$ 5,33), incluindo taxas de rede e saque. Ativos mantidos em custódia própria (carteira digital).\n\n`;
+                                          fullText += `Aquisição de ${formatQuantity(asset.quantity)} ${asset.coin} realizada ao longo de ${year.year} em corretora internacional, utilizando USDT e recursos próprios. Valores convertidos para BRL conforme cotação do dólar da data de aquisição (R$ ${asset.averageDollarRate.toFixed(2).replace('.', ',')}), incluindo taxas de rede e saque. Ativos mantidos em custódia própria (carteira digital).\n\n`;
                                         });
                                       } else if (code === '08.03') {
                                         const totalValue = assets.reduce((sum, a) => sum + a.totalCost, 0);
@@ -2347,10 +2351,11 @@ export default function App() {
                                           return sum + (prev ? prev.totalCost : 0);
                                         }, 0);
                                         const coinList = assets.map(a => a.coin).join(', ');
+                                        const avgRateStable = totalValue > 0 ? assets.reduce((s: number, a: any) => s + a.totalCost * (a.averageDollarRate || 0), 0) / totalValue : 0;
                                         fullText += `Stablecoins — (Código ${code})\n`;
                                         fullText += `Situação em 31/12/${prevYear}: ${formatCurrency(totalPrevValue)}\n`;
                                         fullText += `Situação em 31/12/${year.year}: ${formatCurrency(totalValue)}\n`;
-                                        fullText += `Conjunto de stablecoins (${coinList}) adquiridas em corretoras internacionais com recursos próprios e mantidas em custódia própria (carteira digital). Valores convertidos para BRL conforme cotação do dólar (R$ 5,33) das datas de aquisição, já incluindo taxas de rede e saque.\n\n`;
+                                        fullText += `Conjunto de stablecoins (${coinList}) adquiridas em corretoras internacionais com recursos próprios e mantidas em custódia própria (carteira digital). Valores convertidos para BRL conforme cotação do dólar (R$ ${avgRateStable.toFixed(2).replace('.', ',')})) das datas de aquisição, já incluindo taxas de rede e saque.\n\n`;
                                       } else if (code === '08.02') {
                                         const bigAssets = assets.filter(a => a.totalCost >= 5000);
                                         const smallAssets = assets.filter(a => a.totalCost < 5000);
@@ -2361,7 +2366,7 @@ export default function App() {
                                           fullText += `${asset.coin} — (Código ${code})\n`;
                                           fullText += `Situação em 31/12/${prevYear}: ${formatCurrency(prevValue)}\n`;
                                           fullText += `Situação em 31/12/${year.year}: ${formatCurrency(asset.totalCost)}\n`;
-                                          fullText += `Aquisição de ${formatQuantity(asset.quantity)} ${asset.coin} realizada ao longo de ${year.year} em corretora internacional, utilizando USDT e recursos próprios. Valores convertidos para BRL conforme cotação do dólar da data de aquisição (R$ 5,33), incluindo taxas de rede e saque. Ativos mantidos em custódia própria (carteira digital).\n\n`;
+                                          fullText += `Aquisição de ${formatQuantity(asset.quantity)} ${asset.coin} realizada ao longo de ${year.year} em corretora internacional, utilizando USDT e recursos próprios. Valores convertidos para BRL conforme cotação do dólar da data de aquisição (R$ ${asset.averageDollarRate.toFixed(2).replace('.', ',')}), incluindo taxas de rede e saque. Ativos mantidos em custódia própria (carteira digital).\n\n`;
                                         });
                                         
                                         if (smallAssets.length > 0) {
@@ -2371,10 +2376,11 @@ export default function App() {
                                             return sum + (prev ? prev.totalCost : 0);
                                           }, 0);
                                           const coinList = smallAssets.map(a => a.coin).join(', ');
+                                          const avgRateSmall = totalValue > 0 ? smallAssets.reduce((s: number, a: any) => s + a.totalCost * (a.averageDollarRate || 0), 0) / totalValue : 0;
                                           fullText += `Outras moedas digitais com custo < R$ 5.000 (CONSOLIDADAS) — (Código ${code})\n`;
                                           fullText += `Situação em 31/12/${prevYear}: ${formatCurrency(totalPrevValue)}\n`;
                                           fullText += `Situação em 31/12/${year.year}: ${formatCurrency(totalValue)}\n`;
-                                          fullText += `Conjunto de criptoativos classificados como "outras moedas digitais", adquiridos em corretoras internacionais com recursos próprios e mantidos em custódia própria. Inclui: ${coinList}. Todos os ativos possuem custo individual inferior a R$ 5.000. Valores convertidos para BRL conforme cotação do dólar (R$ 5,33) das datas de aquisição, já incluindo taxas de rede e saque.\n\n`;
+                                          fullText += `Conjunto de criptoativos classificados como "outras moedas digitais", adquiridos em corretoras internacionais com recursos próprios e mantidos em custódia própria. Inclui: ${coinList}. Todos os ativos possuem custo individual inferior a R$ 5.000. Valores convertidos para BRL conforme cotação do dólar (R$ ${avgRateSmall.toFixed(2).replace('.', ',')})) das datas de aquisição, já incluindo taxas de rede e saque.\n\n`;
                                         }
                                       }
                                     });
@@ -2423,7 +2429,7 @@ export default function App() {
                                             Situação em 31/12/{year.year}: {formatCurrency(asset.totalCost)}
                                           </Text>
                                           <Text style={styles.declarationReason}>
-                                            Aquisição de {formatQuantity(asset.quantity)} {asset.coin} realizada ao longo de {year.year} em corretora internacional, utilizando USDT e recursos próprios. Valores convertidos para BRL conforme cotação do dólar da data de aquisição (R$ 5,33), incluindo taxas de rede e saque. Ativos mantidos em custódia própria (carteira digital).
+                                            Aquisição de {formatQuantity(asset.quantity)} {asset.coin} realizada ao longo de {year.year} em corretora internacional, utilizando USDT e recursos próprios. Valores convertidos para BRL conforme cotação do dólar da data de aquisição (R$ {asset.averageDollarRate.toFixed(2).replace('.', ',')}), incluindo taxas de rede e saque. Ativos mantidos em custódia própria (carteira digital).
                                           </Text>
                                         </View>
                                       );
@@ -2439,6 +2445,7 @@ export default function App() {
                                     }, 0);
                                     const coinList = assets.map(a => a.coin).join(', ');
                                     
+                                    const avgRateStable = totalValue > 0 ? assets.reduce((s: number, a: any) => s + a.totalCost * (a.averageDollarRate || 0), 0) / totalValue : 0;
                                     renderItems.push(
                                       <View key={`${code}-consolidated`} style={styles.assetItem}>
                                         <Text style={[styles.assetCoin, { color: '#667eea' }]}>
@@ -2451,7 +2458,7 @@ export default function App() {
                                           Situação em 31/12/{year.year}: {formatCurrency(totalValue)}
                                         </Text>
                                         <Text style={styles.declarationReason}>
-                                          Conjunto de stablecoins ({coinList}) adquiridas em corretoras internacionais com recursos próprios e mantidas em custódia própria (carteira digital). Valores convertidos para BRL conforme cotação do dólar (R$ 5,33) das datas de aquisição, já incluindo taxas de rede e saque.
+                                          Conjunto de stablecoins ({coinList}) adquiridas em corretoras internacionais com recursos próprios e mantidas em custódia própria (carteira digital). Valores convertidos para BRL conforme cotação do dólar (R$ {avgRateStable.toFixed(2).replace('.', ',')})) das datas de aquisição, já incluindo taxas de rede e saque.
                                         </Text>
                                       </View>
                                     );
@@ -2481,7 +2488,7 @@ export default function App() {
                                             Situação em 31/12/{year.year}: {formatCurrency(asset.totalCost)}
                                           </Text>
                                           <Text style={styles.declarationReason}>
-                                            Aquisição de {formatQuantity(asset.quantity)} {asset.coin} realizada ao longo de {year.year} em corretora internacional, utilizando USDT e recursos próprios. Valores convertidos para BRL conforme cotação do dólar da data de aquisição (R$ 5,33), incluindo taxas de rede e saque. Ativos mantidos em custódia própria (carteira digital).
+                                            Aquisição de {formatQuantity(asset.quantity)} {asset.coin} realizada ao longo de {year.year} em corretora internacional, utilizando USDT e recursos próprios. Valores convertidos para BRL conforme cotação do dólar da data de aquisição (R$ {asset.averageDollarRate.toFixed(2).replace('.', ',')}), incluindo taxas de rede e saque. Ativos mantidos em custódia própria (carteira digital).
                                           </Text>
                                         </View>
                                       );
@@ -2496,6 +2503,7 @@ export default function App() {
                                       }, 0);
                                       const coinList = smallAssets.map(a => a.coin).join(', ');
                                       
+                                      const avgRateSmall = totalValue > 0 ? smallAssets.reduce((s: number, a: any) => s + a.totalCost * (a.averageDollarRate || 0), 0) / totalValue : 0;
                                       renderItems.push(
                                         <View key={`${code}-small-consolidated`} style={styles.assetItem}>
                                           <Text style={[styles.assetCoin, { color: '#667eea' }]}>
@@ -2508,7 +2516,7 @@ export default function App() {
                                             Situação em 31/12/{year.year}: {formatCurrency(totalValue)}
                                           </Text>
                                           <Text style={styles.declarationReason}>
-                                            Conjunto de criptoativos classificados como "outras moedas digitais", adquiridos em corretoras internacionais com recursos próprios e mantidos em custódia própria. Inclui: {coinList}. Todos os ativos possuem custo individual inferior a R$ 5.000. Valores convertidos para BRL conforme cotação do dólar (R$ 5,33) das datas de aquisição, já incluindo taxas de rede e saque.
+                                            Conjunto de criptoativos classificados como "outras moedas digitais", adquiridos em corretoras internacionais com recursos próprios e mantidos em custódia própria. Inclui: {coinList}. Todos os ativos possuem custo individual inferior a R$ 5.000. Valores convertidos para BRL conforme cotação do dólar (R$ {avgRateSmall.toFixed(2).replace('.', ',')})) das datas de aquisição, já incluindo taxas de rede e saque.
                                           </Text>
                                         </View>
                                       );
