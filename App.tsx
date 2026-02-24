@@ -163,6 +163,16 @@ export default function App() {
   // Novos estados v22
   const [editingSaleId, setEditingSaleId] = useState<string | null>(null);
   const [sellIsExempt, setSellIsExempt] = useState(false);
+  // Conversor Stablecoin → Cripto
+  const [sellScreenMode, setSellScreenMode] = useState<'sell' | 'convert'>('sell');
+  const [convertFromCoin, setConvertFromCoin] = useState('');
+  const [convertFromAmount, setConvertFromAmount] = useState('');
+  const [convertToCoin, setConvertToCoin] = useState('');
+  const [convertToAmount, setConvertToAmount] = useState('');
+  const [convertDollarRate, setConvertDollarRate] = useState('');
+  const [convertDate, setConvertDate] = useState<Date>(new Date());
+  const [showConvertDatePicker, setShowConvertDatePicker] = useState(false);
+  const [tempConvertDate, setTempConvertDate] = useState(new Date());
   const [sellExchangeType, setSellExchangeType] = useState<'nacional' | 'internacional'>('internacional');
   const [sellTaxPaid, setSellTaxPaid] = useState('');
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -320,6 +330,7 @@ export default function App() {
         setCurrentDollarRate(rate);
         setDollarRate(rate.toFixed(2).replace('.', ','));
         setSellDollarRate(rate.toFixed(2).replace('.', ','));
+        setConvertDollarRate(rate.toFixed(2).replace('.', ','));
         return rate;
       }
     } catch (error) {
@@ -561,6 +572,11 @@ export default function App() {
     setShowSellDatePicker(false);
   };
 
+  const handleConvertDateConfirm = () => {
+    setConvertDate(tempConvertDate);
+    setShowConvertDatePicker(false);
+  };
+
   const renderDatePicker = (visible: boolean, date: Date, onDateChange: (date: Date) => void, onConfirm: () => void, onCancel: () => void) => {
     if (!visible) return null;
 
@@ -694,6 +710,13 @@ export default function App() {
   };
 
 
+
+  const STABLECOINS = ['USDT', 'USDC', 'BUSD', 'DAI', 'TUSD', 'USDD', 'USDP', 'GUSD', 'FDUSD', 'PYUSD', 'USDB', 'USDE', 'UST', 'FRAX'];
+
+  const isStablecoin = (coin: string): boolean => {
+    const upper = coin.toUpperCase();
+    return STABLECOINS.includes(upper) || upper.startsWith('USD') || upper.endsWith('USD');
+  };
 
   const calculateSummary = () => {
     const coinMap = new Map();
@@ -1389,6 +1412,94 @@ export default function App() {
     ]);
   };
 
+  const handleConvert = async () => {
+    try {
+      const fromCoin = convertFromCoin.trim().toUpperCase();
+      const toCoin = convertToCoin.trim().toUpperCase();
+      const fromAmt = parseFloat(convertFromAmount.replace(',', '.'));
+      const toAmt = parseFloat(convertToAmount.replace(',', '.'));
+      const dRate = parseFloat(convertDollarRate.replace(',', '.'));
+
+      if (!fromCoin) { Alert.alert('Erro', 'Informe a stablecoin de origem'); return; }
+      if (!toCoin) { Alert.alert('Erro', 'Informe a cripto a receber'); return; }
+      if (isNaN(fromAmt) || fromAmt <= 0) { Alert.alert('Erro', 'Informe a quantidade de stablecoin a converter'); return; }
+      if (isNaN(toAmt) || toAmt <= 0) { Alert.alert('Erro', 'Informe a quantidade de cripto recebida'); return; }
+      if (isNaN(dRate) || dRate <= 0) { Alert.alert('Erro', 'Informe a cotação do dólar'); return; }
+
+      // Verificar saldo disponível da stablecoin
+      const totalBoughtFrom = purchases.filter(p => p.coin === fromCoin).reduce((sum, p) => sum + p.quantity, 0);
+      const totalSoldFrom = sales.filter(s => s.coin === fromCoin).reduce((sum, s) => sum + s.quantity, 0);
+      const availableFrom = totalBoughtFrom - totalSoldFrom;
+
+      if (fromAmt > availableFrom + 0.00000001) {
+        Alert.alert(
+          'Saldo Insuficiente',
+          `Você tem apenas ${formatQuantity(availableFrom)} ${fromCoin} disponível para converter.`
+        );
+        return;
+      }
+
+      // Calcular custo médio da stablecoin (para profit da "venda")
+      const totalPricePaid = purchases.filter(p => p.coin === fromCoin).reduce((sum, p) => sum + p.pricePaid, 0);
+      const avgPricePerUnit = totalBoughtFrom > 0 ? totalPricePaid / totalBoughtFrom : 1;
+      const profitOnStable = fromAmt - (avgPricePerUnit * fromAmt); // ≈ 0 para stablecoins
+
+      const timestamp = Date.now().toString();
+
+      // Venda da stablecoin (sai do portfólio)
+      const stablecoinSale: CryptoSale = {
+        id: timestamp + '_stab',
+        coin: fromCoin,
+        quantity: fromAmt,
+        priceSold: fromAmt,
+        date: convertDate.toISOString(),
+        pricePerUnit: 1,
+        dollarRate: dRate,
+        profit: profitOnStable,
+        isExempt: false,
+        exchangeType: 'internacional',
+      };
+
+      // Compra da nova cripto (entra no portfólio com custo = valor em USD)
+      const cryptoPurchase: CryptoPurchase = {
+        id: timestamp + '_cryp',
+        coin: toCoin,
+        quantity: toAmt,
+        pricePaid: fromAmt,
+        date: convertDate.toISOString(),
+        pricePerUnit: fromAmt / toAmt,
+        dollarRate: dRate,
+      };
+
+      const updatedSales = [...sales, stablecoinSale];
+      const updatedPurchases = [...purchases, cryptoPurchase];
+
+      await saveSales(updatedSales);
+      await savePurchases(updatedPurchases);
+      setSales(updatedSales);
+      setPurchases(updatedPurchases);
+
+      Alert.alert(
+        '✅ Conversão Registrada!',
+        `${formatQuantity(fromAmt)} ${fromCoin} → ${formatQuantity(toAmt)} ${toCoin}
+` +
+        `Custo base: $${fromAmt.toFixed(2)} (R$ ${(fromAmt * dRate).toFixed(2)})
+` +
+        `Preço unitário: $${(fromAmt / toAmt).toFixed(6)} por ${toCoin}`
+      );
+
+      setConvertFromCoin('');
+      setConvertFromAmount('');
+      setConvertToCoin('');
+      setConvertToAmount('');
+      setConvertDate(new Date());
+      setScreen('home');
+    } catch (error) {
+      Alert.alert('Erro', 'Não foi possível registrar a conversão');
+      console.error(error);
+    }
+  };
+
   const exportToExcel = () => {
     try {
       const filteredPurchases = applyFilters(purchases);
@@ -1965,22 +2076,49 @@ export default function App() {
   if (screen === 'sell') {
     const summary = calculateSummary();
     const availableCoins = summary.filter(s => s.available > 0);
+    const availableStablecoins = summary.filter(s => s.available > 0 && isStablecoin(s.coin));
+    const activeMode = editingSaleId ? 'sell' : sellScreenMode;
 
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>{editingSaleId ? 'Editar Venda' : 'Vender Cripto'}</Text>
+          <Text style={styles.headerTitle}>{editingSaleId ? 'Editar Venda' : activeMode === 'convert' ? '🔄 Converter' : 'Vender Cripto'}</Text>
         </View>
 
         <ScrollView style={styles.content}>
-          {availableCoins.length === 0 ? (
+
+          {/* Toggle Vender / Converter */}
+          {!editingSaleId && (
+            <View style={styles.viewModeToggle}>
+              <TouchableOpacity
+                style={[styles.toggleButton, activeMode === 'sell' && styles.toggleButtonActive]}
+                onPress={() => setSellScreenMode('sell')}
+              >
+                <Text style={[styles.toggleButtonText, activeMode === 'sell' && styles.toggleButtonTextActive]}>
+                  💱 Vender
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.toggleButton, activeMode === 'convert' && styles.toggleButtonActive]}
+                onPress={() => setSellScreenMode('convert')}
+              >
+                <Text style={[styles.toggleButtonText, activeMode === 'convert' && styles.toggleButtonTextActive]}>
+                  🔄 Converter
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* MODO VENDER */}
+          {activeMode === 'sell' && availableCoins.length === 0 && (
             <View style={styles.emptyState}>
               <Text style={styles.emptyText}>Nenhuma criptomoeda disponível</Text>
               <Text style={styles.emptySubtext}>
                 Compre criptomoedas primeiro para poder vender
               </Text>
             </View>
-          ) : (
+          )}
+          {activeMode === 'sell' && availableCoins.length > 0 && (
             <>
               <View style={styles.availableCoinsCard}>
                 <Text style={styles.availableTitle}>📊 Disponível para Venda:</Text>
@@ -2192,6 +2330,130 @@ export default function App() {
               )}
             </>
           )}
+
+          {/* MODO CONVERTER */}
+          {activeMode === 'convert' && availableStablecoins.length === 0 && (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyText}>Nenhuma stablecoin disponível</Text>
+              <Text style={styles.emptySubtext}>
+                Compre USDT, USDC ou outra stablecoin primeiro para poder converter
+              </Text>
+            </View>
+          )}
+
+          {activeMode === 'convert' && availableStablecoins.length > 0 && (
+            <>
+              <View style={styles.infoBox}>
+                <Text style={[styles.infoText, { fontWeight: '700', color: '#667eea' }]}>
+                  💡 Stablecoin → Cripto
+                </Text>
+                <Text style={styles.infoText}>
+                  A stablecoin sai do portfólio como uma venda e a cripto entra como compra. O custo de aquisição da cripto será o valor em USD convertido.
+                </Text>
+              </View>
+
+              <View style={styles.availableCoinsCard}>
+                <Text style={styles.availableTitle}>💵 Stablecoins Disponíveis:</Text>
+                {availableStablecoins.map(item => (
+                  <TouchableOpacity
+                    key={item.coin}
+                    style={styles.availableCoinItem}
+                    onPress={() => setConvertFromCoin(item.coin)}
+                  >
+                    <Text style={styles.availableCoinName}>{item.coin}</Text>
+                    <Text style={styles.availableCoinQty}>{formatQuantity(item.available)} disponível</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Stablecoin de Origem *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Ex: USDT, USDC..."
+                  value={convertFromCoin}
+                  onChangeText={(t) => setConvertFromCoin(t.toUpperCase())}
+                  autoCapitalize="characters"
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Quantidade a Converter (USD) *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="0.00"
+                  value={convertFromAmount}
+                  onChangeText={setConvertFromAmount}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Cripto a Receber *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Ex: BTC, ETH, SOL..."
+                  value={convertToCoin}
+                  onChangeText={(t) => setConvertToCoin(t.toUpperCase())}
+                  autoCapitalize="characters"
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Quantidade Recebida *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="0.00000000"
+                  value={convertToAmount}
+                  onChangeText={setConvertToAmount}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Cotação do Dólar (R$) *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="5.00"
+                  value={convertDollarRate}
+                  onChangeText={setConvertDollarRate}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Data da Conversão *</Text>
+                <TouchableOpacity
+                  style={styles.dateButton}
+                  onPress={() => {
+                    setTempConvertDate(convertDate);
+                    setShowConvertDatePicker(true);
+                  }}
+                >
+                  <Text style={styles.dateButtonText}>
+                    📅 {formatDate(convertDate.toISOString())}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {convertFromAmount && convertToAmount && convertDollarRate && (
+                <View style={styles.infoBox}>
+                  <Text style={styles.infoText}>
+                    Preço unitário da cripto: ${' '}
+                    {(parseFloat(convertFromAmount.replace(',', '.')) / parseFloat(convertToAmount.replace(',', '.'))).toFixed(6)} por {convertToCoin || '…'}
+                  </Text>
+                  <Text style={styles.infoText}>
+                    Custo total em reais: R$ {(parseFloat(convertFromAmount.replace(',', '.')) * parseFloat(convertDollarRate.replace(',', '.'))).toFixed(2)}
+                  </Text>
+                </View>
+              )}
+
+              <TouchableOpacity style={styles.sellButton} onPress={handleConvert}>
+                <Text style={styles.saveButtonText}>🔄 Registrar Conversão</Text>
+              </TouchableOpacity>
+            </>
+          )}
+
         </ScrollView>
 
         {renderTabBar()}
@@ -2226,6 +2488,14 @@ export default function App() {
           setTempSellDate,
           handleSellDateConfirm,
           () => setShowSellDatePicker(false)
+        )}
+
+        {renderDatePicker(
+          showConvertDatePicker,
+          tempConvertDate,
+          setTempConvertDate,
+          handleConvertDateConfirm,
+          () => setShowConvertDatePicker(false)
         )}
       </SafeAreaView>
     );
