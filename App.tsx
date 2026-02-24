@@ -19,6 +19,8 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as ImagePicker from 'expo-image-picker';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 
 interface CryptoPurchase {
   id: string;
@@ -116,6 +118,231 @@ const formatDate = (dateString: string): string => {
   const date = new Date(dateString);
   return date.toLocaleDateString('pt-BR');
 };
+
+// ─── Geração de HTML para PDF do relatório fiscal ─────────────────────────────
+function generateTaxReportHTML(
+  year: any,
+  sales: CryptoSale[],
+  purchases: CryptoPurchase[]
+): string {
+  const yearSales = sales.filter(s => new Date(s.date).getFullYear().toString() === year.year);
+  const exemptSales   = yearSales.filter(s => s.isExempt);
+  const taxableNat    = yearSales.filter(s => s.exchangeType === 'nacional' && !s.isExempt);
+  const intlSales     = yearSales.filter(s => s.exchangeType !== 'nacional');
+  const totalTaxPaid  = yearSales.reduce((sum, s) => sum + (s.taxPaid || 0), 0);
+
+  const fmt = (v: number) => `R$ ${v.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
+  const fmtQty = (v: number) => v % 1 === 0 ? v.toString() : v.toFixed(8).replace(/\.?0+$/, '');
+  const fmtDate = (d: string) => new Date(d).toLocaleDateString('pt-BR');
+
+  // Bens e Direitos
+  const assetsRows = year.assets && year.assets.length > 0
+    ? year.assets.map((a: any) => {
+        const boughtInYear = purchases
+          .filter(p => p.coin === a.coin && new Date(p.date).getFullYear().toString() === year.year)
+          .reduce((s: number, p: CryptoPurchase) => s + p.quantity, 0);
+        return `
+          <tr>
+            <td>${a.coin}</td>
+            <td>${fmtQty(a.quantity)}</td>
+            <td>${fmt(a.averagePriceBRL)}</td>
+            <td>${fmt(a.totalCostBRL)}</td>
+            <td style="font-size:11px;color:#555">${boughtInYear > 0 ? `Adquirido ${fmtQty(boughtInYear)} no exercício` : '—'}</td>
+          </tr>`;
+      }).join('')
+    : '<tr><td colspan="5" style="color:#999">Sem ativos no final do ano</td></tr>';
+
+  // Rendimentos Isentos
+  const isentsRows = exemptSales.length > 0
+    ? exemptSales.map((s, i) => {
+        const val = s.priceSold * s.dollarRate;
+        const cost = (s.priceSold - s.profit) * s.dollarRate;
+        const gain = s.profit * s.dollarRate;
+        return `
+          <tr>
+            <td>${i+1}</td><td>${fmtDate(s.date)}</td><td>${s.coin}</td>
+            <td>${fmtQty(s.quantity)}</td>
+            <td>${fmt(val)}</td><td>${fmt(cost)}</td>
+            <td style="color:#2e7d32;font-weight:700">${fmt(gain)}</td>
+          </tr>`;
+      }).join('')
+    : '<tr><td colspan="7" style="color:#999">Nenhuma venda isenta</td></tr>';
+  const totalIsentoGain = exemptSales.reduce((sum, s) => sum + s.profit * s.dollarRate, 0);
+
+  // GCAP Nacional
+  const gcapNatRows = taxableNat.length > 0
+    ? taxableNat.map((s, i) => {
+        const val = s.priceSold * s.dollarRate;
+        const cost = (s.priceSold - s.profit) * s.dollarRate;
+        const gain = s.profit * s.dollarRate;
+        return `
+          <tr>
+            <td>${i+1}</td><td>${fmtDate(s.date)}</td><td>${s.coin}</td>
+            <td>${fmtQty(s.quantity)}</td>
+            <td>${fmt(val)}</td><td>${fmt(cost)}</td>
+            <td style="color:${gain>=0?'#e65100':'#c62828'};font-weight:700">${fmt(gain)}</td>
+            <td>${s.taxPaid && s.taxPaid>0 ? fmt(s.taxPaid) : '—'}</td>
+          </tr>`;
+      }).join('')
+    : '<tr><td colspan="8" style="color:#999">Nenhuma venda tributável nacional</td></tr>';
+
+  // GCAP Internacional
+  const gcapIntlRows = intlSales.length > 0
+    ? intlSales.map((s, i) => {
+        const val = s.priceSold * s.dollarRate;
+        const cost = (s.priceSold - s.profit) * s.dollarRate;
+        const gain = s.profit * s.dollarRate;
+        return `
+          <tr>
+            <td>${i+1}</td><td>${fmtDate(s.date)}</td><td>${s.coin}</td>
+            <td>${fmtQty(s.quantity)}</td>
+            <td>${fmt(val)}</td><td>${fmt(cost)}</td>
+            <td>R$ ${s.dollarRate.toFixed(2).replace('.', ',')}</td>
+            <td style="color:${gain>=0?'#4527a0':'#c62828'};font-weight:700">${fmt(gain)}</td>
+            <td>${s.taxPaid && s.taxPaid>0 ? fmt(s.taxPaid) : '—'}</td>
+          </tr>`;
+      }).join('')
+    : '<tr><td colspan="9" style="color:#999">Nenhuma venda internacional</td></tr>';
+
+  // Detalhamento mensal
+  const monthNames = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const monthRows = year.months && year.months.length > 0
+    ? year.months.map((m: any) => {
+        const mn = monthNames[parseInt(m.month)-1];
+        const color = m.profit >= 0 ? '#2e7d32' : '#c62828';
+        return `<tr>
+          <td>${mn}/${m.year}</td>
+          <td>${fmt(m.sales)}</td>
+          <td>${fmt(m.cost)}</td>
+          <td style="color:${color};font-weight:700">${fmt(m.profit)}</td>
+        </tr>`;
+      }).join('')
+    : '<tr><td colspan="4" style="color:#999">Sem movimentações</td></tr>';
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Relatório Fiscal ${year.year} — CapitalChain</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: Arial, sans-serif; font-size:13px; color:#1C1C1E; background:#F8F9FD; padding:24px; }
+  h1 { font-size:22px; color:#667eea; margin-bottom:4px; }
+  .subtitle { font-size:12px; color:#888; margin-bottom:24px; }
+  .section { background:#fff; border-radius:12px; padding:18px; margin-bottom:20px; box-shadow:0 2px 8px rgba(0,0,0,0.07); }
+  .section-title { font-size:15px; font-weight:800; color:#1C1C1E; margin-bottom:14px; padding-bottom:8px; border-bottom:2px solid #F0F0F5; }
+  .badge { display:inline-block; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700; }
+  .badge-green  { background:#E8F5E9; color:#2e7d32; }
+  .badge-orange { background:#FFF3E0; color:#e65100; }
+  .badge-purple { background:#EDE7F6; color:#4527a0; }
+  .badge-red    { background:#FFEBEE; color:#c62828; }
+  .kpi-row { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:6px; }
+  .kpi { flex:1; min-width:120px; background:#F8F9FD; border-radius:10px; padding:12px; text-align:center; }
+  .kpi-label { font-size:10px; color:#888; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px; }
+  .kpi-value { font-size:16px; font-weight:800; color:#667eea; }
+  .kpi-value.green { color:#2e7d32; }
+  .kpi-value.red   { color:#c62828; }
+  table { width:100%; border-collapse:collapse; margin-top:10px; font-size:12px; }
+  th { background:#667eea; color:#fff; padding:8px 10px; text-align:left; font-size:11px; }
+  td { padding:8px 10px; border-bottom:1px solid #F0F0F5; vertical-align:top; }
+  tr:last-child td { border-bottom:none; }
+  tr:nth-child(even) td { background:#F8F9FD; }
+  .footer { text-align:center; color:#aaa; font-size:10px; margin-top:30px; }
+  .instrucao { background:#EEF2FF; border-left:4px solid #667eea; padding:10px 14px; border-radius:0 8px 8px 0; margin-top:10px; font-size:12px; color:#3C3C43; }
+  @media print { body { background:#fff; padding:0; } }
+</style>
+</head>
+<body>
+
+<h1>📊 Relatório Fiscal — ${year.year}</h1>
+<p class="subtitle">Gerado pelo CapitalChain · ${new Date().toLocaleDateString('pt-BR', {day:'2-digit',month:'long',year:'numeric'})}</p>
+
+<!-- KPIs do Ano -->
+<div class="section">
+  <div class="section-title">📈 Resumo do Ano</div>
+  <div class="kpi-row">
+    <div class="kpi"><div class="kpi-label">Patrimônio 01/01</div><div class="kpi-value">${fmt(year.patrimonyStart)}</div></div>
+    <div class="kpi"><div class="kpi-label">Patrimônio 31/12</div><div class="kpi-value">${fmt(year.patrimonyEnd)}</div></div>
+    <div class="kpi"><div class="kpi-label">Resultado Bruto</div><div class="kpi-value ${year.netResult>=0?'green':'red'}">${fmt(year.netResult)}</div></div>
+    <div class="kpi"><div class="kpi-label">Imposto Devido</div><div class="kpi-value ${year.taxDue>0?'red':'green'}">${fmt(year.taxDue)}</div></div>
+    ${totalTaxPaid > 0 ? `<div class="kpi"><div class="kpi-label">DARF Pago</div><div class="kpi-value">${fmt(totalTaxPaid)}</div></div>` : ''}
+    ${year.lossToCarry > 0 ? `<div class="kpi"><div class="kpi-label">Prejuízo p/ ${parseInt(year.year)+1}</div><div class="kpi-value red">${fmt(year.lossToCarry)}</div></div>` : ''}
+  </div>
+</div>
+
+<!-- Bens e Direitos -->
+<div class="section">
+  <div class="section-title">🏠 Bens e Direitos em 31/12/${year.year}</div>
+  <div class="instrucao">
+    Ficha <strong>Bens e Direitos</strong> · Grupo 08 · Código 01 a 03 (conforme moeda)<br/>
+    Discriminação: informar quantidade, custo médio e corretora.
+  </div>
+  <table>
+    <tr><th>Moeda</th><th>Qtd em 31/12</th><th>Preço Médio</th><th>Custo Total (R$)</th><th>Observação</th></tr>
+    ${assetsRows}
+    <tr style="background:#EEF2FF"><td colspan="3" style="font-weight:800;text-align:right">Total Patrimônio:</td><td colspan="2" style="font-weight:800;color:#667eea">${fmt(year.patrimonyEnd)}</td></tr>
+  </table>
+</div>
+
+<!-- Rendimentos Isentos -->
+<div class="section">
+  <div class="section-title">🟢 Rendimentos Isentos e Não Tributáveis <span class="badge badge-green">Código 26</span></div>
+  <div class="instrucao">
+    Ficha <strong>Rendimentos Isentos e Não Tributáveis</strong> · Código <strong>26 — Outros</strong><br/>
+    Valor a lançar: total do lucro das vendas abaixo de R$ 35.000/mês em exchange nacional.<br/>
+    Base legal: art. 22, § 2º, Lei 9.250/95 c/c IN RFB 1.888/2019.
+  </div>
+  <table>
+    <tr><th>#</th><th>Data</th><th>Moeda</th><th>Qtd</th><th>Valor Recebido</th><th>Custo</th><th>Lucro Isento</th></tr>
+    ${isentsRows}
+    ${exemptSales.length > 0 ? `<tr style="background:#E8F5E9"><td colspan="6" style="font-weight:800;text-align:right">Total a lançar (Código 26):</td><td style="font-weight:800;color:#2e7d32">${fmt(totalIsentoGain)}</td></tr>` : ''}
+  </table>
+</div>
+
+<!-- GCAP Nacional -->
+<div class="section">
+  <div class="section-title">🟠 Ganhos de Capital — Exchange Nacional <span class="badge badge-orange">GCAP</span></div>
+  <div class="instrucao">
+    Preencher no <strong>Programa GCAP</strong> e importar no IRPF.<br/>
+    Alíquota: 15% sobre ganho. Tipo de bem: Moeda virtual.
+  </div>
+  <table>
+    <tr><th>#</th><th>Data</th><th>Moeda</th><th>Qtd</th><th>Valor Alienação</th><th>Custo</th><th>Ganho</th><th>DARF Pago</th></tr>
+    ${gcapNatRows}
+  </table>
+</div>
+
+<!-- GCAP Internacional -->
+<div class="section">
+  <div class="section-title">🟣 Ganhos de Capital — Exchange Internacional <span class="badge badge-purple">GCAP 15%</span></div>
+  <div class="instrucao">
+    Preencher no <strong>Programa GCAP</strong> e importar no IRPF.<br/>
+    Valores convertidos para BRL pela cotação USD/BRL da data da operação.
+  </div>
+  <table>
+    <tr><th>#</th><th>Data</th><th>Moeda</th><th>Qtd</th><th>Valor (BRL)</th><th>Custo (BRL)</th><th>USD/BRL</th><th>Ganho</th><th>DARF Pago</th></tr>
+    ${gcapIntlRows}
+  </table>
+</div>
+
+<!-- Detalhamento Mensal -->
+<div class="section">
+  <div class="section-title">📆 Detalhamento Mensal</div>
+  <table>
+    <tr><th>Mês</th><th>Vendas</th><th>Custo</th><th>Resultado</th></tr>
+    ${monthRows}
+  </table>
+</div>
+
+<div class="footer">
+  CapitalChain · Relatório gerado em ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}<br/>
+  Este relatório é um auxílio para declaração. Consulte um contador para validação fiscal.
+</div>
+
+</body>
+</html>`;
+}
 
 export default function App() {
   const [screen, setScreen] = useState<'home' | 'add' | 'sell' | 'history' | 'taxes'>('home');
@@ -414,7 +641,7 @@ export default function App() {
   // Exportar Relatório RF para PDF
   const exportRFReportToPDF = async () => {
     try {
-      // Exportar relatório RF como texto compartilhável (expo-print removido por incompatibilidade)
+      // Exportar relatório RF como texto compartilhável
       const taxData = calculateTaxReport();
       let report = '📋 RELATÓRIO RECEITA FEDERAL\n';
       report += '================================\n';
@@ -3409,6 +3636,31 @@ export default function App() {
                             })}
                           </View>
                         )}
+                        {/* Botão Gerar PDF */}
+                        <TouchableOpacity
+                          style={styles.pdfButton}
+                          onPress={async () => {
+                            try {
+                              const html = generateTaxReportHTML(year, sales, purchases);
+                              const { uri } = await Print.printToFileAsync({ html, base64: false });
+                              const fileName = `RelatorioFiscal_${year.year}.pdf`;
+                              const available = await Sharing.isAvailableAsync();
+                              if (available) {
+                                await Sharing.shareAsync(uri, {
+                                  mimeType: 'application/pdf',
+                                  dialogTitle: `Relatório Fiscal ${year.year}`,
+                                  UTI: 'com.adobe.pdf',
+                                });
+                              } else {
+                                Alert.alert('PDF Gerado', `Arquivo salvo em: ${uri}`);
+                              }
+                            } catch (e: any) {
+                              Alert.alert('Erro', 'Não foi possível gerar o PDF: ' + e.message);
+                            }
+                          }}
+                        >
+                          <Text style={styles.pdfButtonText}>📄 Gerar PDF — Relatório {year.year}</Text>
+                        </TouchableOpacity>
                       </View>
                     )}
                   </View>
@@ -6368,6 +6620,25 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     borderLeftColor: '#667eea',
     backgroundColor: '#F5F6FF',
+  },
+  pdfButton: {
+    backgroundColor: '#667eea',
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginTop: 20,
+    marginHorizontal: 2,
+    elevation: 4,
+    shadowColor: '#667eea',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+  },
+  pdfButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   irSaleGroup: {
     marginBottom: 16,
