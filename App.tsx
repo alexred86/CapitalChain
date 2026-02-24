@@ -29,6 +29,7 @@ interface CryptoPurchase {
   pricePerUnit: number;
   dollarRate: number;
   attachment?: string;
+  conversionId?: string;
 }
 
 interface CryptoSale {
@@ -44,6 +45,7 @@ interface CryptoSale {
   isExempt?: boolean;
   exchangeType?: 'nacional' | 'internacional';
   taxPaid?: number;
+  conversionId?: string;
 }
 
 const STORAGE_KEY = '@crypto_purchases';
@@ -1207,6 +1209,14 @@ export default function App() {
   };
 
   const handleEdit = (purchase: CryptoPurchase) => {
+    if (purchase.conversionId) {
+      Alert.alert(
+        '🔄 Conversão',
+        'Este registro faz parte de uma conversão automática e não pode ser editado individualmente.\n\nExclua a conversão e registre novamente para alterar os valores.',
+        [{ text: 'Entendido' }]
+      );
+      return;
+    }
     setCoin(purchase.coin);
     setQuantity(purchase.quantity.toString());
     setPricePaid(purchase.pricePaid.toString());
@@ -1348,33 +1358,57 @@ export default function App() {
   };
 
   const handleDelete = async (id: string) => {
-    Alert.alert('Confirmar', 'Deseja excluir esta compra?', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Excluir',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            const updated = purchases.filter((p) => p.id !== id);
-            await savePurchases(updated);
-            setPurchases(updated);
-            
-            // Recalcular impostos após deletar compra
-            const tempTaxData = calculateTaxReport();
-            if (tempTaxData.newTaxLosses && Object.keys(tempTaxData.newTaxLosses).length > 0) {
-              await saveTaxLosses(tempTaxData.newTaxLosses);
+    const purchase = purchases.find(p => p.id === id);
+    const isConversion = !!purchase?.conversionId;
+    const convId = purchase?.conversionId;
+
+    Alert.alert(
+      'Confirmar',
+      isConversion
+        ? `Esta compra faz parte de uma conversão.\nAo excluir, a venda vinculada da stablecoin também será removida e o saldo retorna ao portfólio.\n\nConfirmar exclusão completa?`
+        : 'Deseja excluir esta compra?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Excluir',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const updatedPurchases = purchases.filter((p) => p.id !== id);
+              await savePurchases(updatedPurchases);
+              setPurchases(updatedPurchases);
+
+              let updatedSales = sales;
+              if (isConversion && convId) {
+                updatedSales = sales.filter(s => s.conversionId !== convId);
+                await saveSales(updatedSales);
+                setSales(updatedSales);
+              }
+
+              const tempTaxData = calculateTaxReport();
+              if (tempTaxData.newTaxLosses && Object.keys(tempTaxData.newTaxLosses).length > 0) {
+                await saveTaxLosses(tempTaxData.newTaxLosses);
+              }
+
+              Alert.alert('Sucesso', isConversion ? 'Conversão excluída! Stablecoin retornou ao portfólio.' : 'Compra excluída!');
+            } catch (error) {
+              Alert.alert('Erro', 'Não foi possível excluir');
             }
-            
-            Alert.alert('Sucesso', 'Compra excluída!');
-          } catch (error) {
-            Alert.alert('Erro', 'Não foi possível excluir');
-          }
+          },
         },
-      },
-    ]);
+      ]
+    );
   };
 
   const handleEditSale = (sale: CryptoSale) => {
+    if (sale.conversionId) {
+      Alert.alert(
+        '🔄 Conversão',
+        'Este registro faz parte de uma conversão automática e não pode ser editado individualmente.\n\nExclua a conversão e registre novamente para alterar os valores.',
+        [{ text: 'Entendido' }]
+      );
+      return;
+    }
     setSellCoin(sale.coin);
     setSellQuantity(sale.quantity.toString());
     setSellPrice(sale.priceSold.toString());
@@ -1389,27 +1423,46 @@ export default function App() {
   };
 
   const handleDeleteSale = async (id: string) => {
-    Alert.alert('Confirmar', 'Deseja excluir esta venda?', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Excluir',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            const updated = sales.filter((s) => s.id !== id);
-            await saveSales(updated);
-            setSales(updated);
-            const tempTaxData = calculateTaxReport();
-            if (tempTaxData.newTaxLosses && Object.keys(tempTaxData.newTaxLosses).length > 0) {
-              await saveTaxLosses(tempTaxData.newTaxLosses);
+    const sale = sales.find(s => s.id === id);
+    const isConversion = !!sale?.conversionId;
+    const convId = sale?.conversionId;
+
+    Alert.alert(
+      'Confirmar',
+      isConversion
+        ? `Esta venda faz parte de uma conversão.\nAo excluir, a compra da cripto vinculada também será removida e a stablecoin retorna ao portfólio.\n\nConfirmar exclusão completa?`
+        : 'Deseja excluir esta venda?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Excluir',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const updatedSales = sales.filter((s) => s.id !== id);
+              await saveSales(updatedSales);
+              setSales(updatedSales);
+
+              let updatedPurchases = purchases;
+              if (isConversion && convId) {
+                updatedPurchases = purchases.filter(p => p.conversionId !== convId);
+                await savePurchases(updatedPurchases);
+                setPurchases(updatedPurchases);
+              }
+
+              const tempTaxData = calculateTaxReport();
+              if (tempTaxData.newTaxLosses && Object.keys(tempTaxData.newTaxLosses).length > 0) {
+                await saveTaxLosses(tempTaxData.newTaxLosses);
+              }
+
+              Alert.alert('Sucesso', isConversion ? 'Conversão excluída! Stablecoin retornou ao portfólio.' : 'Venda excluída!');
+            } catch (error) {
+              Alert.alert('Erro', 'Não foi possível excluir');
             }
-            Alert.alert('Sucesso', 'Venda excluída!');
-          } catch (error) {
-            Alert.alert('Erro', 'Não foi possível excluir');
-          }
+          },
         },
-      },
-    ]);
+      ]
+    );
   };
 
   const handleConvert = async () => {
@@ -1445,6 +1498,7 @@ export default function App() {
       const profitOnStable = fromAmt - (avgPricePerUnit * fromAmt); // ≈ 0 para stablecoins
 
       const timestamp = Date.now().toString();
+      const convId = `conv_${timestamp}`;
 
       // Venda da stablecoin (sai do portfólio)
       const stablecoinSale: CryptoSale = {
@@ -1458,6 +1512,7 @@ export default function App() {
         profit: profitOnStable,
         isExempt: false,
         exchangeType: 'internacional',
+        conversionId: convId,
       };
 
       // Compra da nova cripto (entra no portfólio com custo = valor em USD)
@@ -1469,6 +1524,7 @@ export default function App() {
         date: convertDate.toISOString(),
         pricePerUnit: fromAmt / toAmt,
         dollarRate: dRate,
+        conversionId: convId,
       };
 
       const updatedSales = [...sales, stablecoinSale];
@@ -3626,10 +3682,10 @@ export default function App() {
               <Text style={styles.transactionTypeHeader}>🛒 COMPRAS</Text>
             )}
             {sortedPurchases.map((item) => (
-              <View key={`purchase-${item.id}`} style={styles.card}>
+              <View key={`purchase-${item.id}`} style={[styles.card, item.conversionId ? styles.conversionCard : undefined]}>
                 <View style={styles.cardHeader}>
                   <View style={styles.cardHeaderLeft}>
-                    <Text style={styles.transactionType}>🛒 COMPRA</Text>
+                    <Text style={styles.transactionType}>{item.conversionId ? '🔄 CONVERSÃO' : '🛒 COMPRA'}</Text>
                     <Text style={styles.coinName}>{item.coin}</Text>
                   </View>
                   <View style={{alignItems: 'flex-end'}}>
@@ -3700,10 +3756,10 @@ export default function App() {
               <Text style={styles.transactionTypeHeader}>💱 VENDAS</Text>
             )}
             {sortedSales.map((item) => (
-              <View key={`sale-${item.id}`} style={[styles.card, styles.saleCard]}>
+              <View key={`sale-${item.id}`} style={[styles.card, item.conversionId ? styles.conversionCard : styles.saleCard]}>
                 <View style={styles.cardHeader}>
                   <View style={styles.cardHeaderLeft}>
-                    <Text style={styles.transactionTypeSale}>💱 VENDA</Text>
+                    <Text style={item.conversionId ? styles.transactionType : styles.transactionTypeSale}>{item.conversionId ? '🔄 CONVERSÃO' : '💱 VENDA'}</Text>
                     <Text style={styles.coinName}>{item.coin}</Text>
                   </View>
                   <View style={{alignItems: 'flex-end'}}>
@@ -6138,6 +6194,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#1C1C1E',
+  },
+  conversionCard: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#667eea',
+    backgroundColor: '#F5F6FF',
   },
   switchRow: {
     flexDirection: 'row',
