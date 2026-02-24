@@ -3079,73 +3079,225 @@ export default function App() {
                           return (
                             <View style={styles.detailSection}>
                               <View style={styles.rfHeaderRow}>
-                                <Text style={styles.detailSectionTitle}>📋 Ganhos de Capital (RF)</Text>
+                                <Text style={styles.detailSectionTitle}>📋 Operações de Venda — Declaração IR</Text>
                                 <TouchableOpacity
                                   style={styles.copyButton}
                                   onPress={async () => {
-                                    let text = `GANHOS DE CAPITAL - ANO ${year.year}\n\n`;
-                                    yearSales.forEach((s, i) => {
-                                      const valueBRL = s.priceSold * s.dollarRate;
-                                      const costBRL = (s.priceSold - s.profit) * s.dollarRate;
-                                      const gainBRL = s.profit * s.dollarRate;
-                                      text += `${i + 1}. ${new Date(s.date).toLocaleDateString('pt-BR')} — ${s.coin}\n`;
-                                      text += `   Tipo: ${s.exchangeType === 'nacional' ? 'Nacional' : 'Internacional'}\n`;
-                                      text += `   Qtd alienada: ${formatQuantity(s.quantity)}\n`;
-                                      text += `   Valor de alienação: R$ ${valueBRL.toFixed(2)}\n`;
-                                      text += `   Custo de aquisição: R$ ${costBRL.toFixed(2)}\n`;
-                                      text += `   ${gainBRL >= 0 ? 'Ganho' : 'Perda'} de capital: R$ ${Math.abs(gainBRL).toFixed(2)}\n`;
-                                      text += `   Isento: ${s.isExempt ? 'Sim (Nacional < R$ 35.000/mês)' : 'Não'}\n`;
-                                      if (s.taxPaid && s.taxPaid > 0) text += `   Imposto pago (DARF): R$ ${s.taxPaid.toFixed(2)}\n`;
-                                      text += '\n';
-                                    });
+                                    const exemptSales = yearSales.filter(s => s.isExempt);
+                                    const taxableNational = yearSales.filter(s => s.exchangeType === 'nacional' && !s.isExempt);
+                                    const international = yearSales.filter(s => s.exchangeType !== 'nacional');
+                                    let text = `DECLARAÇÃO IR - VENDAS DE CRIPTOMOEDAS - ANO ${year.year}\n`;
+                                    text += '='.repeat(50) + '\n\n';
+
+                                    if (exemptSales.length > 0) {
+                                      text += '── RENDIMENTOS ISENTOS (Exchange Nacional < R$ 35.000/mês) ──\n';
+                                      text += 'Ficha: Rendimentos Isentos e Não Tributáveis → Código 26\n\n';
+                                      exemptSales.forEach((s, i) => {
+                                        const valueBRL = s.priceSold * s.dollarRate;
+                                        const gainBRL = s.profit * s.dollarRate;
+                                        const costBRL = (s.priceSold - s.profit) * s.dollarRate;
+                                        text += `${i+1}. ${new Date(s.date).toLocaleDateString('pt-BR')} — ${s.coin}\n`;
+                                        text += `   Beneficiário: [Seu nome/CPF]\n`;
+                                        text += `   Descrição: Ganho de capital na alienação de ${formatQuantity(s.quantity)} ${s.coin} em exchange nacional. Valor total de vendas no mês inferior a R$ 35.000,00 — isento conforme art. 22, § 2º, Lei 9.250/95. Valor recebido: R$ ${valueBRL.toFixed(2).replace('.', ',')}. Custo de aquisição: R$ ${costBRL.toFixed(2).replace('.', ',')}. Lucro: R$ ${gainBRL.toFixed(2).replace('.', ',')}\n\n`;
+                                      });
+                                      const totalExemptGain = exemptSales.reduce((sum, s) => sum + (s.profit * s.dollarRate), 0);
+                                      text += `   → Valor total a lançar no campo "Valor": R$ ${totalExemptGain.toFixed(2).replace('.', ',')}\n\n`;
+                                    }
+
+                                    if (taxableNational.length > 0) {
+                                      text += '── GANHOS DE CAPITAL TRIBUTÁVEIS (Exchange Nacional) ──\n';
+                                      text += 'Programa GCAP → importar no IRPF\n\n';
+                                      taxableNational.forEach((s, i) => {
+                                        const valueBRL = s.priceSold * s.dollarRate;
+                                        const costBRL = (s.priceSold - s.profit) * s.dollarRate;
+                                        const gainBRL = s.profit * s.dollarRate;
+                                        text += `${i+1}. ${new Date(s.date).toLocaleDateString('pt-BR')} — ${s.coin}\n`;
+                                        text += `   Tipo de bem: Moeda virtual\n`;
+                                        text += `   Data alienação: ${new Date(s.date).toLocaleDateString('pt-BR')}\n`;
+                                        text += `   Valor de alienação: R$ ${valueBRL.toFixed(2).replace('.', ',')}\n`;
+                                        text += `   Custo de aquisição: R$ ${costBRL.toFixed(2).replace('.', ',')}\n`;
+                                        text += `   Ganho de capital: R$ ${gainBRL.toFixed(2).replace('.', ',')}\n`;
+                                        text += `   Discriminação: Alienação de ${formatQuantity(s.quantity)} ${s.coin} em exchange nacional em ${new Date(s.date).toLocaleDateString('pt-BR')}. Valor de venda: R$ ${valueBRL.toFixed(2).replace('.', ',')}. Custo médio de aquisição: R$ ${costBRL.toFixed(2).replace('.', ',')}.\n`;
+                                        if (s.taxPaid && s.taxPaid > 0) text += `   Imposto pago (DARF): R$ ${s.taxPaid.toFixed(2).replace('.', ',')}\n`;
+                                        text += '\n';
+                                      });
+                                    }
+
+                                    if (international.length > 0) {
+                                      text += '── GANHOS DE CAPITAL (Exchange Internacional — 15%) ──\n';
+                                      text += 'Programa GCAP → importar no IRPF\n\n';
+                                      international.forEach((s, i) => {
+                                        const valueBRL = s.priceSold * s.dollarRate;
+                                        const costBRL = (s.priceSold - s.profit) * s.dollarRate;
+                                        const gainBRL = s.profit * s.dollarRate;
+                                        text += `${i+1}. ${new Date(s.date).toLocaleDateString('pt-BR')} — ${s.coin}\n`;
+                                        text += `   Tipo de bem: Moeda virtual\n`;
+                                        text += `   Data alienação: ${new Date(s.date).toLocaleDateString('pt-BR')}\n`;
+                                        text += `   Valor de alienação: R$ ${valueBRL.toFixed(2).replace('.', ',')}\n`;
+                                        text += `   Custo de aquisição: R$ ${costBRL.toFixed(2).replace('.', ',')}\n`;
+                                        text += `   Ganho de capital: R$ ${gainBRL.toFixed(2).replace('.', ',')}\n`;
+                                        text += `   Discriminação: Alienação de ${formatQuantity(s.quantity)} ${s.coin} em exchange internacional em ${new Date(s.date).toLocaleDateString('pt-BR')}. Cotação USD/BRL utilizada: R$ ${s.dollarRate.toFixed(2).replace('.', ',')}. Valor recebido: R$ ${valueBRL.toFixed(2).replace('.', ',')}. Custo médio: R$ ${costBRL.toFixed(2).replace('.', ',')}.\n`;
+                                        if (s.taxPaid && s.taxPaid > 0) text += `   Imposto pago (DARF): R$ ${s.taxPaid.toFixed(2).replace('.', ',')}\n`;
+                                        text += '\n';
+                                      });
+                                    }
+
                                     if (totalTaxPaidYear > 0) {
-                                      text += `Total imposto pago no ano: R$ ${totalTaxPaidYear.toFixed(2)}\n`;
+                                      text += `Total de DARF pago no ano: R$ ${totalTaxPaidYear.toFixed(2).replace('.', ',')}\n`;
                                     }
                                     await Clipboard.setString(text);
-                                    Alert.alert('✅ Copiado!', 'Ganhos de Capital copiados para a área de transferência');
+                                    Alert.alert('✅ Copiado!', 'Relatório de vendas copiado — inclui Isentos, GCAP Nacional e GCAP Internacional.');
                                   }}
                                 >
                                   <Text style={styles.copyButtonText}>📋 Copiar</Text>
                                 </TouchableOpacity>
                               </View>
 
-                              {yearSales.map((s, idx) => {
-                                const valueBRL = s.priceSold * s.dollarRate;
-                                const costBRL = (s.priceSold - s.profit) * s.dollarRate;
-                                const gainBRL = s.profit * s.dollarRate;
+                              {/* Grupo: Isentos (Nacional < 35k) */}
+                              {(() => {
+                                const exemptSales = yearSales.filter(s => s.isExempt);
+                                if (exemptSales.length === 0) return null;
+                                const totalExemptGain = exemptSales.reduce((sum, s) => sum + (s.profit * s.dollarRate), 0);
                                 return (
-                                  <View key={idx} style={[styles.assetItem, { borderLeftWidth: 3, borderLeftColor: gainBRL >= 0 ? '#34C759' : '#FF3B30' }]}>
-                                    <Text style={[styles.assetCoin, { color: '#1C1C1E' }]}>
-                                      {new Date(s.date).toLocaleDateString('pt-BR')} — {s.coin}
-                                      {s.isExempt ? '  ✅ Isento' : ''}
-                                    </Text>
-                                    <Text style={styles.assetQuantity}>
-                                      Corretora: {s.exchangeType === 'nacional' ? '🇧🇷 Nacional' : '🌐 Internacional'}
-                                    </Text>
-                                    <Text style={styles.assetQuantity}>
-                                      Qtd alienada: {formatQuantity(s.quantity)}
-                                    </Text>
-                                    <Text style={styles.assetCost}>
-                                      Valor de alienação: R$ {valueBRL.toFixed(2)}
-                                    </Text>
-                                    <Text style={styles.assetCost}>
-                                      Custo de aquisição: R$ {costBRL.toFixed(2)}
-                                    </Text>
-                                    <Text style={[styles.assetTotal, { color: gainBRL >= 0 ? '#34C759' : '#FF3B30' }]}>
-                                      {gainBRL >= 0 ? 'Ganho' : 'Perda'}: R$ {Math.abs(gainBRL).toFixed(2)}
-                                    </Text>
-                                    {s.taxPaid !== undefined && s.taxPaid > 0 && (
-                                      <Text style={[styles.assetTotal, { color: '#667eea' }]}>
-                                        Imposto pago (DARF): R$ {s.taxPaid.toFixed(2)}
-                                      </Text>
+                                  <View style={styles.irSaleGroup}>
+                                    <View style={styles.irSaleGroupHeader}>
+                                      <Text style={styles.irSaleGroupLabel}>🟢 RENDIMENTOS ISENTOS</Text>
+                                      <Text style={styles.irSaleGroupSub}>Ficha: Rendimentos Isentos → Código 26</Text>
+                                    </View>
+                                    {exemptSales.map((s, idx) => {
+                                      const valueBRL = s.priceSold * s.dollarRate;
+                                      const costBRL = (s.priceSold - s.profit) * s.dollarRate;
+                                      const gainBRL = s.profit * s.dollarRate;
+                                      return (
+                                        <View key={idx} style={[styles.assetItem, { borderLeftWidth: 3, borderLeftColor: '#34C759' }]}>
+                                          <Text style={[styles.assetCoin, { color: '#1C1C1E' }]}>
+                                            {new Date(s.date).toLocaleDateString('pt-BR')} — {s.coin}  ✅ Isento
+                                          </Text>
+                                          <Text style={styles.assetQuantity}>🇧🇷 Nacional · Qtd: {formatQuantity(s.quantity)}</Text>
+                                          <Text style={styles.assetCost}>Valor recebido: R$ {valueBRL.toFixed(2)}</Text>
+                                          <Text style={styles.assetCost}>Custo de aquisição: R$ {costBRL.toFixed(2)}</Text>
+                                          <Text style={[styles.assetTotal, { color: '#34C759' }]}>Ganho: R$ {gainBRL.toFixed(2)}</Text>
+                                          <View style={styles.irInstructionBox}>
+                                            <Text style={styles.irInstructionTitle}>📝 Como lançar no IRPF:</Text>
+                                            <Text style={styles.irInstructionText}>Ficha: Rendimentos Isentos e Não Tributáveis</Text>
+                                            <Text style={styles.irInstructionText}>Código: 26 — Outros</Text>
+                                            <Text style={styles.irInstructionText}>Valor: R$ {gainBRL.toFixed(2).replace('.', ',')}</Text>
+                                            <Text style={styles.irInstructionText}>Descrição: Ganho de capital na alienação de {formatQuantity(s.quantity)} {s.coin} em exchange nacional em {new Date(s.date).toLocaleDateString('pt-BR')}. Valor total de vendas no mês inferior a R$ 35.000,00. Isento conforme art. 22, § 2º, Lei 9.250/95.</Text>
+                                          </View>
+                                        </View>
+                                      );
+                                    })}
+                                    <View style={[styles.detailRow, { marginTop: 8 }]}>
+                                      <Text style={styles.detailLabelBold}>Total isentos a lançar:</Text>
+                                      <Text style={[styles.detailValueBold, { color: '#34C759' }]}>R$ {totalExemptGain.toFixed(2)}</Text>
+                                    </View>
+                                  </View>
+                                );
+                              })()}
+
+                              {/* Grupo: Tributáveis Nacional (GCAP) */}
+                              {(() => {
+                                const taxableNat = yearSales.filter(s => s.exchangeType === 'nacional' && !s.isExempt);
+                                if (taxableNat.length === 0) return null;
+                                const totalTaxNat = taxableNat.reduce((sum, s) => sum + (s.taxPaid || 0), 0);
+                                return (
+                                  <View style={styles.irSaleGroup}>
+                                    <View style={[styles.irSaleGroupHeader, { backgroundColor: '#FFF3E0' }]}>
+                                      <Text style={[styles.irSaleGroupLabel, { color: '#E65100' }]}>🟠 GANHOS DE CAPITAL — NACIONAL (GCAP)</Text>
+                                      <Text style={styles.irSaleGroupSub}>Programa GCAP → importar no IRPF</Text>
+                                    </View>
+                                    {taxableNat.map((s, idx) => {
+                                      const valueBRL = s.priceSold * s.dollarRate;
+                                      const costBRL = (s.priceSold - s.profit) * s.dollarRate;
+                                      const gainBRL = s.profit * s.dollarRate;
+                                      return (
+                                        <View key={idx} style={[styles.assetItem, { borderLeftWidth: 3, borderLeftColor: '#FF9800' }]}>
+                                          <Text style={[styles.assetCoin, { color: '#1C1C1E' }]}>
+                                            {new Date(s.date).toLocaleDateString('pt-BR')} — {s.coin}
+                                          </Text>
+                                          <Text style={styles.assetQuantity}>🇧🇷 Nacional · Qtd: {formatQuantity(s.quantity)}</Text>
+                                          <Text style={styles.assetCost}>Valor de alienação: R$ {valueBRL.toFixed(2)}</Text>
+                                          <Text style={styles.assetCost}>Custo de aquisição: R$ {costBRL.toFixed(2)}</Text>
+                                          <Text style={[styles.assetTotal, { color: gainBRL >= 0 ? '#FF9800' : '#FF3B30' }]}>
+                                            {gainBRL >= 0 ? 'Ganho' : 'Perda'}: R$ {Math.abs(gainBRL).toFixed(2)}
+                                          </Text>
+                                          {s.taxPaid !== undefined && s.taxPaid > 0 && (
+                                            <Text style={[styles.assetTotal, { color: '#667eea' }]}>DARF pago: R$ {s.taxPaid.toFixed(2)}</Text>
+                                          )}
+                                          <View style={styles.irInstructionBox}>
+                                            <Text style={styles.irInstructionTitle}>📝 Campos no GCAP:</Text>
+                                            <Text style={styles.irInstructionText}>Tipo de bem: Moeda virtual</Text>
+                                            <Text style={styles.irInstructionText}>Data de alienação: {new Date(s.date).toLocaleDateString('pt-BR')}</Text>
+                                            <Text style={styles.irInstructionText}>Valor de alienação: R$ {valueBRL.toFixed(2).replace('.', ',')}</Text>
+                                            <Text style={styles.irInstructionText}>Custo de aquisição: R$ {costBRL.toFixed(2).replace('.', ',')}</Text>
+                                            <Text style={styles.irInstructionText}>Discriminação: Alienação de {formatQuantity(s.quantity)} {s.coin} em exchange nacional em {new Date(s.date).toLocaleDateString('pt-BR')}. Valor recebido: R$ {valueBRL.toFixed(2).replace('.', ',')}. Custo médio: R$ {costBRL.toFixed(2).replace('.', ',')}.</Text>
+                                          </View>
+                                        </View>
+                                      );
+                                    })}
+                                    {totalTaxNat > 0 && (
+                                      <View style={[styles.detailRow, { marginTop: 8 }]}>
+                                        <Text style={styles.detailLabelBold}>Total DARF pago (nacional):</Text>
+                                        <Text style={[styles.detailValueBold, { color: '#667eea' }]}>R$ {totalTaxNat.toFixed(2)}</Text>
+                                      </View>
                                     )}
                                   </View>
                                 );
-                              })}
+                              })()}
+
+                              {/* Grupo: Internacional */}
+                              {(() => {
+                                const intlSales = yearSales.filter(s => s.exchangeType !== 'nacional');
+                                if (intlSales.length === 0) return null;
+                                const totalTaxIntl = intlSales.reduce((sum, s) => sum + (s.taxPaid || 0), 0);
+                                return (
+                                  <View style={styles.irSaleGroup}>
+                                    <View style={[styles.irSaleGroupHeader, { backgroundColor: '#EDE7F6' }]}>
+                                      <Text style={[styles.irSaleGroupLabel, { color: '#4527A0' }]}>🟣 GANHOS DE CAPITAL — INTERNACIONAL (GCAP 15%)</Text>
+                                      <Text style={styles.irSaleGroupSub}>Programa GCAP → importar no IRPF</Text>
+                                    </View>
+                                    {intlSales.map((s, idx) => {
+                                      const valueBRL = s.priceSold * s.dollarRate;
+                                      const costBRL = (s.priceSold - s.profit) * s.dollarRate;
+                                      const gainBRL = s.profit * s.dollarRate;
+                                      return (
+                                        <View key={idx} style={[styles.assetItem, { borderLeftWidth: 3, borderLeftColor: '#667eea' }]}>
+                                          <Text style={[styles.assetCoin, { color: '#1C1C1E' }]}>
+                                            {new Date(s.date).toLocaleDateString('pt-BR')} — {s.coin}
+                                          </Text>
+                                          <Text style={styles.assetQuantity}>🌐 Internacional · Qtd: {formatQuantity(s.quantity)}</Text>
+                                          <Text style={styles.assetCost}>Valor de alienação: R$ {valueBRL.toFixed(2)}</Text>
+                                          <Text style={styles.assetCost}>Custo de aquisição: R$ {costBRL.toFixed(2)}</Text>
+                                          <Text style={[styles.assetTotal, { color: gainBRL >= 0 ? '#667eea' : '#FF3B30' }]}>
+                                            {gainBRL >= 0 ? 'Ganho' : 'Perda'}: R$ {Math.abs(gainBRL).toFixed(2)}
+                                          </Text>
+                                          {s.taxPaid !== undefined && s.taxPaid > 0 && (
+                                            <Text style={[styles.assetTotal, { color: '#667eea' }]}>DARF pago: R$ {s.taxPaid.toFixed(2)}</Text>
+                                          )}
+                                          <View style={styles.irInstructionBox}>
+                                            <Text style={styles.irInstructionTitle}>📝 Campos no GCAP:</Text>
+                                            <Text style={styles.irInstructionText}>Tipo de bem: Moeda virtual</Text>
+                                            <Text style={styles.irInstructionText}>Data de alienação: {new Date(s.date).toLocaleDateString('pt-BR')}</Text>
+                                            <Text style={styles.irInstructionText}>Valor de alienação: R$ {valueBRL.toFixed(2).replace('.', ',')}</Text>
+                                            <Text style={styles.irInstructionText}>Custo de aquisição: R$ {costBRL.toFixed(2).replace('.', ',')}</Text>
+                                            <Text style={styles.irInstructionText}>Discriminação: Alienação de {formatQuantity(s.quantity)} {s.coin} em exchange internacional em {new Date(s.date).toLocaleDateString('pt-BR')}. Cotação USD/BRL: R$ {s.dollarRate.toFixed(2).replace('.', ',')}. Valor recebido: R$ {valueBRL.toFixed(2).replace('.', ',')}. Custo médio: R$ {costBRL.toFixed(2).replace('.', ',')}.</Text>
+                                          </View>
+                                        </View>
+                                      );
+                                    })}
+                                    {totalTaxIntl > 0 && (
+                                      <View style={[styles.detailRow, { marginTop: 8 }]}>
+                                        <Text style={styles.detailLabelBold}>Total DARF pago (internacional):</Text>
+                                        <Text style={[styles.detailValueBold, { color: '#667eea' }]}>R$ {totalTaxIntl.toFixed(2)}</Text>
+                                      </View>
+                                    )}
+                                  </View>
+                                );
+                              })()}
 
                               {totalTaxPaidYear > 0 && (
                                 <View style={styles.detailRow}>
-                                  <Text style={styles.detailLabelBold}>Total imposto pago no ano:</Text>
+                                  <Text style={styles.detailLabelBold}>Total DARF pago no ano:</Text>
                                   <Text style={[styles.detailValueBold, { color: '#667eea' }]}>
                                     R$ {totalTaxPaidYear.toFixed(2)}
                                   </Text>
@@ -6215,6 +6367,50 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     borderLeftColor: '#667eea',
     backgroundColor: '#F5F6FF',
+  },
+  irSaleGroup: {
+    marginBottom: 16,
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#E8EAED',
+  },
+  irSaleGroupHeader: {
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  irSaleGroupLabel: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#2E7D32',
+    letterSpacing: 0.3,
+  },
+  irSaleGroupSub: {
+    fontSize: 11,
+    color: '#555',
+    marginTop: 2,
+    fontStyle: 'italic',
+  },
+  irInstructionBox: {
+    marginTop: 10,
+    backgroundColor: '#F8F9FD',
+    borderRadius: 8,
+    padding: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: '#667eea',
+  },
+  irInstructionTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#667eea',
+    marginBottom: 5,
+  },
+  irInstructionText: {
+    fontSize: 12,
+    color: '#3C3C43',
+    lineHeight: 18,
+    marginBottom: 2,
   },
   switchRow: {
     flexDirection: 'row',
