@@ -2840,8 +2840,11 @@ export default function App() {
                                           const prevValue = prev ? prev.totalCost : 0;
                                           fullText += `${asset.coin} — (Código ${code})\n`;
                                           fullText += `Situação em 31/12/${prevYear}: ${formatCurrency(prevValue)}\n`;
+                                          const boughtInYear = purchases.filter(p => p.coin === asset.coin && new Date(p.date).getFullYear().toString() === year.year).reduce((sum, p) => sum + p.quantity, 0);
                                           fullText += `Situação em 31/12/${year.year}: ${formatCurrency(asset.totalCost)}\n`;
-                                          fullText += `Aquisição de ${formatQuantity(asset.quantity)} ${asset.coin} realizada ao longo de ${year.year} em corretora internacional, utilizando USDT e recursos próprios. Valores convertidos para BRL conforme cotação do dólar da data de aquisição (R$ ${asset.averageDollarRate.toFixed(2).replace('.', ',')}), incluindo taxas de rede e saque. Ativos mantidos em custódia própria (carteira digital).\n\n`;
+                                          fullText += boughtInYear > 0
+                                            ? `Adquirido no exercício de ${year.year}: ${formatQuantity(boughtInYear)} ${asset.coin}. Saldo acumulado em 31/12/${year.year}: ${formatQuantity(asset.quantity)} ${asset.coin}. Adquirido em corretora internacional utilizando USDT e recursos próprios. Valores convertidos para BRL conforme cotação do dólar da data de aquisição (R$ ${asset.averageDollarRate.toFixed(2).replace('.', ',')}), incluindo taxas de rede e saque. Ativos mantidos em custódia própria (carteira digital).\n\n`
+                                            : `Saldo de exercícios anteriores, sem novas aquisições de ${asset.coin} em ${year.year}. Saldo em 31/12/${year.year}: ${formatQuantity(asset.quantity)} ${asset.coin}. Ativos em custódia própria (carteira digital).\n\n`;
                                         });
                                       } else if (code === '08.03') {
                                         const totalValue = assets.reduce((sum, a) => sum + a.totalCost, 0);
@@ -2862,10 +2865,13 @@ export default function App() {
                                         bigAssets.forEach((asset) => {
                                           const prev = year.patrimonyStartAssets?.find((p: any) => p.coin === asset.coin);
                                           const prevValue = prev ? prev.totalCost : 0;
+                                          const boughtInYear = purchases.filter(p => p.coin === asset.coin && new Date(p.date).getFullYear().toString() === year.year).reduce((sum, p) => sum + p.quantity, 0);
                                           fullText += `${asset.coin} — (Código ${code})\n`;
                                           fullText += `Situação em 31/12/${prevYear}: ${formatCurrency(prevValue)}\n`;
                                           fullText += `Situação em 31/12/${year.year}: ${formatCurrency(asset.totalCost)}\n`;
-                                          fullText += `Aquisição de ${formatQuantity(asset.quantity)} ${asset.coin} realizada ao longo de ${year.year} em corretora internacional, utilizando USDT e recursos próprios. Valores convertidos para BRL conforme cotação do dólar da data de aquisição (R$ ${asset.averageDollarRate.toFixed(2).replace('.', ',')}), incluindo taxas de rede e saque. Ativos mantidos em custódia própria (carteira digital).\n\n`;
+                                          fullText += boughtInYear > 0
+                                            ? `Adquirido no exercício de ${year.year}: ${formatQuantity(boughtInYear)} ${asset.coin}. Saldo acumulado em 31/12/${year.year}: ${formatQuantity(asset.quantity)} ${asset.coin}. Adquirido em corretora internacional utilizando USDT e recursos próprios. Valores convertidos para BRL conforme cotação do dólar da data de aquisição (R$ ${asset.averageDollarRate.toFixed(2).replace('.', ',')}), incluindo taxas de rede e saque. Ativos mantidos em custódia própria (carteira digital).\n\n`
+                                            : `Saldo de exercícios anteriores, sem novas aquisições de ${asset.coin} em ${year.year}. Saldo em 31/12/${year.year}: ${formatQuantity(asset.quantity)} ${asset.coin}. Ativos em custódia própria (carteira digital).\n\n`;
                                         });
                                         
                                         if (smallAssets.length > 0) {
@@ -2928,7 +2934,12 @@ export default function App() {
                                             Situação em 31/12/{year.year}: {formatCurrency(asset.totalCost)}
                                           </Text>
                                           <Text style={styles.declarationReason}>
-                                            Aquisição de {formatQuantity(asset.quantity)} {asset.coin} realizada ao longo de {year.year} em corretora internacional, utilizando USDT e recursos próprios. Valores convertidos para BRL conforme cotação do dólar da data de aquisição (R$ {asset.averageDollarRate.toFixed(2).replace('.', ',')}), incluindo taxas de rede e saque. Ativos mantidos em custódia própria (carteira digital).
+                                            {(() => {
+                                              const boughtInYear = purchases.filter(p => p.coin === asset.coin && new Date(p.date).getFullYear().toString() === year.year).reduce((sum, p) => sum + p.quantity, 0);
+                                              return boughtInYear > 0
+                                                ? `Adquirido no exercício de ${year.year}: ${formatQuantity(boughtInYear)} ${asset.coin}. Saldo acumulado em 31/12/${year.year}: ${formatQuantity(asset.quantity)} ${asset.coin}. Adquirido em corretora internacional utilizando USDT e recursos próprios. Valores convertidos para BRL conforme cotação do dólar da data de aquisição (R$ ${asset.averageDollarRate.toFixed(2).replace('.', ',')}), incluindo taxas de rede e saque. Ativos mantidos em custódia própria (carteira digital).`
+                                                : `Saldo de exercícios anteriores, sem novas aquisições de ${asset.coin} em ${year.year}. Saldo em 31/12/${year.year}: ${formatQuantity(asset.quantity)} ${asset.coin}. Ativos em custódia própria (carteira digital).`;
+                                            })()}
                                           </Text>
                                         </View>
                                       );
@@ -2987,7 +2998,12 @@ export default function App() {
                                             Situação em 31/12/{year.year}: {formatCurrency(asset.totalCost)}
                                           </Text>
                                           <Text style={styles.declarationReason}>
-                                            Aquisição de {formatQuantity(asset.quantity)} {asset.coin} realizada ao longo de {year.year} em corretora internacional, utilizando USDT e recursos próprios. Valores convertidos para BRL conforme cotação do dólar da data de aquisição (R$ {asset.averageDollarRate.toFixed(2).replace('.', ',')}), incluindo taxas de rede e saque. Ativos mantidos em custódia própria (carteira digital).
+                                            {(() => {
+                                              const boughtInYear = purchases.filter(p => p.coin === asset.coin && new Date(p.date).getFullYear().toString() === year.year).reduce((sum, p) => sum + p.quantity, 0);
+                                              return boughtInYear > 0
+                                                ? `Adquirido no exercício de ${year.year}: ${formatQuantity(boughtInYear)} ${asset.coin}. Saldo acumulado em 31/12/${year.year}: ${formatQuantity(asset.quantity)} ${asset.coin}. Adquirido em corretora internacional utilizando USDT e recursos próprios. Valores convertidos para BRL conforme cotação do dólar da data de aquisição (R$ ${asset.averageDollarRate.toFixed(2).replace('.', ',')}), incluindo taxas de rede e saque. Ativos mantidos em custódia própria (carteira digital).`
+                                                : `Saldo de exercícios anteriores, sem novas aquisições de ${asset.coin} em ${year.year}. Saldo em 31/12/${year.year}: ${formatQuantity(asset.quantity)} ${asset.coin}. Ativos em custódia própria (carteira digital).`;
+                                            })()}
                                           </Text>
                                         </View>
                                       );
