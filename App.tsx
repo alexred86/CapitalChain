@@ -3775,74 +3775,74 @@ export default function App() {
         )}
       </View>
 
-      {/* Resumo do Período Filtrado */}
-      {hasActiveFilters && (
-        <View style={styles.summaryContainer}>
-          <Text style={styles.summaryTitle}>📊 Resumo do Período</Text>
+      <ScrollView style={styles.list} keyboardShouldPersistTaps="handled" nestedScrollEnabled={true}>
+        {/* Resumo do Período Filtrado */}
+        {hasActiveFilters && (
+          <View style={styles.summaryContainer}>
+            <Text style={styles.summaryTitle}>📊 Resumo do Período</Text>
           
-          {/* Resumo de Compras */}
-          {(transactionType === 'all' || transactionType === 'purchases') && purchaseSummary.length > 0 && (
-            <View>
-              <Text style={styles.summarySubtitle}>📊 Compras</Text>
-              {purchaseSummary.map((item) => (
-                <View key={`purchase-${item.coin}`} style={styles.summaryCard}>
-                  <View style={styles.summaryHeader}>
-                    <Text style={styles.summaryCoinName}>{item.coin}</Text>
-                    <Text style={styles.summaryCount}>{item.count} compra(s)</Text>
+            {/* Resumo de Compras */}
+            {(transactionType === 'all' || transactionType === 'purchases') && purchaseSummary.length > 0 && (
+              <View>
+                <Text style={styles.summarySubtitle}>📊 Compras</Text>
+                {purchaseSummary.map((item) => (
+                  <View key={`purchase-${item.coin}`} style={styles.summaryCard}>
+                    <View style={styles.summaryHeader}>
+                      <Text style={styles.summaryCoinName}>{item.coin}</Text>
+                      <Text style={styles.summaryCount}>{item.count} compra(s)</Text>
+                    </View>
+                    <View style={styles.summaryRow}>
+                      <Text style={styles.summaryLabel}>Quantidade:</Text>
+                      <Text style={styles.summaryValue}>{formatQuantity(item.totalQuantity)}</Text>
+                    </View>
+                    <View style={styles.summaryRow}>
+                      <Text style={styles.summaryLabel}>Preço Médio:</Text>
+                      <Text style={styles.summaryValueHighlight}>{formatCurrency(item.averagePrice)}</Text>
+                    </View>
+                    <View style={styles.summaryRow}>
+                      <Text style={styles.summaryLabel}>Investido:</Text>
+                      <Text style={styles.summaryValue}>{formatCurrency(item.totalInvested)}</Text>
+                    </View>
                   </View>
-                  <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Quantidade:</Text>
-                    <Text style={styles.summaryValue}>{formatQuantity(item.totalQuantity)}</Text>
-                  </View>
-                  <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Preço Médio:</Text>
-                    <Text style={styles.summaryValueHighlight}>{formatCurrency(item.averagePrice)}</Text>
-                  </View>
-                  <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Investido:</Text>
-                    <Text style={styles.summaryValue}>{formatCurrency(item.totalInvested)}</Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-          )}
+                ))}
+              </View>
+            )}
           
-          {/* Resumo de Vendas */}
-          {(transactionType === 'all' || transactionType === 'sales') && salesSummary.length > 0 && (
-            <View>
-              <Text style={styles.summarySubtitle}>📊 Vendas</Text>
-              {salesSummary.map((item) => (
-                <View key={`sale-${item.coin}`} style={[styles.summaryCard, styles.salesSummaryCard]}>
-                  <View style={styles.summaryHeader}>
-                    <Text style={styles.summaryCoinName}>{item.coin}</Text>
-                    <Text style={styles.summaryCount}>{item.count} venda(s)</Text>
+            {/* Resumo de Vendas */}
+            {(transactionType === 'all' || transactionType === 'sales') && salesSummary.length > 0 && (
+              <View>
+                <Text style={styles.summarySubtitle}>📊 Vendas</Text>
+                {salesSummary.map((item) => (
+                  <View key={`sale-${item.coin}`} style={[styles.summaryCard, styles.salesSummaryCard]}>
+                    <View style={styles.summaryHeader}>
+                      <Text style={styles.summaryCoinName}>{item.coin}</Text>
+                      <Text style={styles.summaryCount}>{item.count} venda(s)</Text>
+                    </View>
+                    <View style={styles.summaryRow}>
+                      <Text style={styles.summaryLabel}>Quantidade:</Text>
+                      <Text style={styles.summaryValue}>{formatQuantity(item.totalSold)}</Text>
+                    </View>
+                    <View style={styles.summaryRow}>
+                      <Text style={styles.summaryLabel}>Preço Médio:</Text>
+                      <Text style={styles.summaryValueHighlight}>{formatCurrency(item.averageSalePrice)}</Text>
+                    </View>
+                    <View style={styles.summaryRow}>
+                      <Text style={styles.summaryLabel}>Receita:</Text>
+                      <Text style={styles.summaryValue}>{formatCurrency(item.revenue)}</Text>
+                    </View>
+                    <View style={styles.summaryRow}>
+                      <Text style={styles.summaryLabel}>{item.totalProfit >= 0 ? 'Lucro:' : 'Prejuízo:'}</Text>
+                      <Text style={[styles.summaryValueHighlight, item.totalProfit >= 0 ? styles.profit : styles.loss]}>
+                        {formatCurrency(Math.abs(item.totalProfit))}
+                      </Text>
+                    </View>
                   </View>
-                  <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Quantidade:</Text>
-                    <Text style={styles.summaryValue}>{formatQuantity(item.totalSold)}</Text>
-                  </View>
-                  <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Preço Médio:</Text>
-                    <Text style={styles.summaryValueHighlight}>{formatCurrency(item.averageSalePrice)}</Text>
-                  </View>
-                  <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Receita:</Text>
-                    <Text style={styles.summaryValue}>{formatCurrency(item.revenue)}</Text>
-                  </View>
-                  <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>{item.totalProfit >= 0 ? 'Lucro:' : 'Prejuízo:'}</Text>
-                    <Text style={[styles.summaryValueHighlight, item.totalProfit >= 0 ? styles.profit : styles.loss]}>
-                      {formatCurrency(Math.abs(item.totalProfit))}
-                    </Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
-      )}
+                ))}
+              </View>
+            )}
+          </View>
+        )}
 
-      <ScrollView style={styles.list}>
         {/* Compras */}
         {(transactionType === 'all' || transactionType === 'purchases') && (
           <View>
@@ -4819,6 +4819,7 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   list: {
+    flex: 1,
     padding: 18,
     paddingBottom: 110,
   },
