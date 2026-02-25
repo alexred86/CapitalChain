@@ -54,6 +54,7 @@ const STORAGE_KEY = '@crypto_purchases';
 const SALES_STORAGE_KEY = '@crypto_sales';
 const TAX_LOSSES_KEY = '@crypto_tax_losses';
 const HIDE_VALUES_KEY = '@hide_values_pref';
+const DECL_PERCENT_KEY = '@declaration_percent';
 
 const formatCurrency = (value: number): string => {
   return new Intl.NumberFormat('en-US', {
@@ -123,7 +124,8 @@ const formatDate = (dateString: string): string => {
 function generateTaxReportHTML(
   year: any,
   sales: CryptoSale[],
-  purchases: CryptoPurchase[]
+  purchases: CryptoPurchase[],
+  pct: number = 1
 ): string {
   const yearSales = sales.filter(s => new Date(s.date).getFullYear().toString() === year.year);
   const exemptSales   = yearSales.filter(s => s.isExempt);
@@ -136,17 +138,20 @@ function generateTaxReportHTML(
   const fmtDate = (d: string) => new Date(d).toLocaleDateString('pt-BR');
 
   // Bens e Direitos
-  const assetsRows = year.assets && year.assets.length > 0
-    ? year.assets.map((a: any) => {
+  const adjPdAssets = (year.patrimonyEndAssets || []).map((a: any) => ({
+    ...a, quantity: a.quantity * pct, totalCost: a.totalCost * pct,
+  }));
+  const assetsRows = adjPdAssets.length > 0
+    ? adjPdAssets.map((a: any) => {
         const boughtInYear = purchases
           .filter(p => p.coin === a.coin && new Date(p.date).getFullYear().toString() === year.year)
-          .reduce((s: number, p: CryptoPurchase) => s + p.quantity, 0);
+          .reduce((s: number, p: CryptoPurchase) => s + p.quantity, 0) * pct;
         return `
           <tr>
             <td>${a.coin}</td>
             <td>${fmtQty(a.quantity)}</td>
-            <td>${fmt(a.averagePriceBRL)}</td>
-            <td>${fmt(a.totalCostBRL)}</td>
+            <td>${fmt(a.averageCost)}</td>
+            <td>${fmt(a.totalCost)}</td>
             <td style="font-size:11px;color:#555">${boughtInYear > 0 ? `Adquirido ${fmtQty(boughtInYear)} no exercício` : '—'}</td>
           </tr>`;
       }).join('')
@@ -263,7 +268,7 @@ function generateTaxReportHTML(
   <div class="section-title">📈 Resumo do Ano</div>
   <div class="kpi-row">
     <div class="kpi"><div class="kpi-label">Patrimônio 01/01</div><div class="kpi-value">${fmt(year.patrimonyStart)}</div></div>
-    <div class="kpi"><div class="kpi-label">Patrimônio 31/12</div><div class="kpi-value">${fmt(year.patrimonyEnd)}</div></div>
+    <div class="kpi"><div class="kpi-label">Patrimônio 31/12${pct < 1 ? ` (${Math.round(pct*100)}%)` : ''}</div><div class="kpi-value">${fmt(year.patrimonyEnd * pct)}</div></div>
     <div class="kpi"><div class="kpi-label">Resultado Bruto</div><div class="kpi-value ${year.netResult>=0?'green':'red'}">${fmt(year.netResult)}</div></div>
     <div class="kpi"><div class="kpi-label">Imposto Devido</div><div class="kpi-value ${year.taxDue>0?'red':'green'}">${fmt(year.taxDue)}</div></div>
     ${totalTaxPaid > 0 ? `<div class="kpi"><div class="kpi-label">DARF Pago</div><div class="kpi-value">${fmt(totalTaxPaid)}</div></div>` : ''}
@@ -281,7 +286,7 @@ function generateTaxReportHTML(
   <table>
     <tr><th>Moeda</th><th>Qtd em 31/12</th><th>Preço Médio</th><th>Custo Total (R$)</th><th>Observação</th></tr>
     ${assetsRows}
-    <tr style="background:#EEF2FF"><td colspan="3" style="font-weight:800;text-align:right">Total Patrimônio:</td><td colspan="2" style="font-weight:800;color:#667eea">${fmt(year.patrimonyEnd)}</td></tr>
+    <tr style="background:#EEF2FF"><td colspan="3" style="font-weight:800;text-align:right">Total Patrimônio${pct < 1 ? ` (${Math.round(pct*100)}%)` : ''}:</td><td colspan="2" style="font-weight:800;color:#667eea">${fmt(year.patrimonyEnd * pct)}</td></tr>
   </table>
 </div>
 
@@ -351,6 +356,7 @@ export default function App() {
   const [taxLosses, setTaxLosses] = useState<{[year: string]: number}>({});
   const [expandedYears, setExpandedYears] = useState<{[year: string]: boolean}>({});
   const [taxViewMode, setTaxViewMode] = useState<'years' | 'months'>('years');
+  const [declarationPercent, setDeclarationPercent] = useState<Record<string, number>>({});
   const [coin, setCoin] = useState('');
   const [quantity, setQuantity] = useState('');
   const [pricePaid, setPricePaid] = useState('');
@@ -474,6 +480,10 @@ export default function App() {
       const hideValData = await AsyncStorage.getItem(HIDE_VALUES_KEY);
       if (hideValData !== null) {
         setHideValues(JSON.parse(hideValData));
+      }
+      const declPctData = await AsyncStorage.getItem(DECL_PERCENT_KEY);
+      if (declPctData) {
+        setDeclarationPercent(JSON.parse(declPctData));
       }
     } catch (error) {
       console.error('Erro ao carregar:', error);
@@ -2931,6 +2941,12 @@ export default function App() {
                 const hasProfit = year.netResultWithCompensation > 0;
                 const hasLoss = year.netResult < 0;
                 const hadCompensation = year.accumulatedLoss > 0;
+                const decPct = (declarationPercent[year.year] ?? 100) / 100;
+                const declAdjAssets = (year.patrimonyEndAssets || []).map((a: any) => ({
+                  ...a,
+                  quantity: a.quantity * decPct,
+                  totalCost: a.totalCost * decPct,
+                }));
                 
                 return (
                   <View key={year.year}>
@@ -2995,6 +3011,49 @@ export default function App() {
                     {/* DETALHES DO ANO (EXPANDIDO) */}
                     {isExpanded && (
                       <View style={styles.fiscalYearDetails}>
+
+                        {/* ── Seletor de % a Declarar ── */}
+                        {(() => {
+                          const pct = declarationPercent[year.year] ?? 100;
+                          return (
+                            <View style={styles.declPercentBox}>
+                              <View style={styles.declPercentHeader}>
+                                <Text style={styles.declPercentTitle}>📊 % a Declarar</Text>
+                                <View style={[styles.declPercentBadge, pct < 100 && styles.declPercentBadgePartial]}>
+                                  <Text style={[styles.declPercentBadgeText, pct < 100 && styles.declPercentBadgeTextPartial]}>
+                                    {pct}%
+                                  </Text>
+                                </View>
+                              </View>
+                              <Text style={styles.declPercentSubtitle}>
+                                Ajusta quantidades e valores em Bens e Direitos. Preço médio, ganhos e impostos não mudam.
+                              </Text>
+                              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }}>
+                                {[10,20,30,40,50,60,70,80,90,100].map(step => (
+                                  <TouchableOpacity
+                                    key={step}
+                                    style={[styles.declPercentBtn, pct === step && styles.declPercentBtnActive]}
+                                    onPress={async () => {
+                                      const updated = { ...declarationPercent, [year.year]: step };
+                                      setDeclarationPercent(updated);
+                                      await AsyncStorage.setItem(DECL_PERCENT_KEY, JSON.stringify(updated));
+                                    }}
+                                  >
+                                    <Text style={[styles.declPercentBtnText, pct === step && styles.declPercentBtnTextActive]}>
+                                      {step}%
+                                    </Text>
+                                  </TouchableOpacity>
+                                ))}
+                              </ScrollView>
+                              {pct < 100 && (
+                                <Text style={styles.declPercentWarning}>
+                                  ⚠️ Declarando {pct}% → Patrimônio ajustado: {formatCurrency(year.patrimonyEnd * pct / 100)}
+                                </Text>
+                              )}
+                            </View>
+                          );
+                        })()}
+
                         {/* Bens e Direitos */}
                         <View style={styles.detailSection}>
                           <Text style={styles.detailSectionTitle}>🏠 Bens e Direitos (31/12)</Text>
@@ -3003,8 +3062,8 @@ export default function App() {
                             <Text style={styles.detailValue}>{formatCurrency(year.patrimonyStart)}</Text>
                           </View>
                           <View style={styles.detailRow}>
-                            <Text style={styles.detailLabel}>Ano Atual ({year.year}):</Text>
-                            <Text style={styles.detailValue}>{formatCurrency(year.patrimonyEnd)}</Text>
+                            <Text style={styles.detailLabel}>Ano Atual ({year.year}){decPct < 1 ? ` (${Math.round(decPct * 100)}%)` : ''}:</Text>
+                            <Text style={styles.detailValue}>{formatCurrency(year.patrimonyEnd * decPct)}</Text>
                           </View>
                           <View style={styles.detailRow}>
                             <Text style={styles.detailLabelBold}>Variação:</Text>
@@ -3012,7 +3071,7 @@ export default function App() {
                               styles.detailValueBold,
                               (year.patrimonyEnd - year.patrimonyStart) >= 0 ? styles.profit : styles.loss
                             ]}>
-                              {formatCurrency(year.patrimonyEnd - year.patrimonyStart)}
+                              {formatCurrency(year.patrimonyEnd * decPct - year.patrimonyStart)}
                             </Text>
                           </View>
                           
@@ -3020,7 +3079,7 @@ export default function App() {
                           {year.patrimonyEndAssets && year.patrimonyEndAssets.length > 0 && (
                             <View style={styles.assetsDetail}>
                               <Text style={styles.assetsDetailTitle}>Criptoativos em 31/12/{year.year}:</Text>
-                              {year.patrimonyEndAssets.map((asset: any, idx: number) => (
+                              {declAdjAssets.map((asset: any, idx: number) => (
                                 <View key={idx} style={styles.assetItem}>
                                   <Text style={styles.assetCoin}>{asset.coin}</Text>
                                   <Text style={styles.assetQuantity}>
@@ -3050,7 +3109,7 @@ export default function App() {
                                     // Gerar texto completo para copiar
                                     const prevYear = parseInt(year.year) - 1;
                                     const groupedByCode: Record<string, any[]> = {};
-                                    year.patrimonyEndAssets.forEach((asset: any) => {
+                                    declAdjAssets.forEach((asset: any) => {
                                       const code = getCryptoCode(asset.coin);
                                       if (!groupedByCode[code]) groupedByCode[code] = [];
                                       groupedByCode[code].push(asset);
@@ -3067,7 +3126,7 @@ export default function App() {
                                           const prevValue = prev ? prev.totalCost : 0;
                                           fullText += `${asset.coin} — (Código ${code})\n`;
                                           fullText += `Situação em 31/12/${prevYear}: ${formatCurrency(prevValue)}\n`;
-                                          const boughtInYear = purchases.filter(p => p.coin === asset.coin && new Date(p.date).getFullYear().toString() === year.year).reduce((sum, p) => sum + p.quantity, 0);
+                                          const boughtInYear = purchases.filter(p => p.coin === asset.coin && new Date(p.date).getFullYear().toString() === year.year).reduce((sum, p) => sum + p.quantity, 0) * decPct;
                                           fullText += `Situação em 31/12/${year.year}: ${formatCurrency(asset.totalCost)}\n`;
                                           fullText += boughtInYear > 0
                                             ? `Adquirido no exercício de ${year.year}: ${formatQuantity(boughtInYear)} ${asset.coin}. Saldo acumulado em 31/12/${year.year}: ${formatQuantity(asset.quantity)} ${asset.coin}. Adquirido em corretora internacional utilizando USDT e recursos próprios. Valores convertidos para BRL conforme cotação do dólar da data de aquisição (R$ ${asset.averageDollarRate.toFixed(2).replace('.', ',')}), incluindo taxas de rede e saque. Ativos mantidos em custódia própria (carteira digital).\n\n`
@@ -3092,7 +3151,7 @@ export default function App() {
                                         bigAssets.forEach((asset) => {
                                           const prev = year.patrimonyStartAssets?.find((p: any) => p.coin === asset.coin);
                                           const prevValue = prev ? prev.totalCost : 0;
-                                          const boughtInYear = purchases.filter(p => p.coin === asset.coin && new Date(p.date).getFullYear().toString() === year.year).reduce((sum, p) => sum + p.quantity, 0);
+                                          const boughtInYear = purchases.filter(p => p.coin === asset.coin && new Date(p.date).getFullYear().toString() === year.year).reduce((sum, p) => sum + p.quantity, 0) * decPct;
                                           fullText += `${asset.coin} — (Código ${code})\n`;
                                           fullText += `Situação em 31/12/${prevYear}: ${formatCurrency(prevValue)}\n`;
                                           fullText += `Situação em 31/12/${year.year}: ${formatCurrency(asset.totalCost)}\n`;
@@ -3129,7 +3188,7 @@ export default function App() {
                                 
                                 // Agrupar ativos por código RF
                                 const groupedByCode: Record<string, any[]> = {};
-                                year.patrimonyEndAssets.forEach((asset: any) => {
+                                declAdjAssets.forEach((asset: any) => {
                                   const code = getCryptoCode(asset.coin);
                                   if (!groupedByCode[code]) {
                                     groupedByCode[code] = [];
@@ -3162,7 +3221,7 @@ export default function App() {
                                           </Text>
                                           <Text style={styles.declarationReason}>
                                             {(() => {
-                                              const boughtInYear = purchases.filter(p => p.coin === asset.coin && new Date(p.date).getFullYear().toString() === year.year).reduce((sum, p) => sum + p.quantity, 0);
+                                              const boughtInYear = purchases.filter(p => p.coin === asset.coin && new Date(p.date).getFullYear().toString() === year.year).reduce((sum, p) => sum + p.quantity, 0) * decPct;
                                               return boughtInYear > 0
                                                 ? `Adquirido no exercício de ${year.year}: ${formatQuantity(boughtInYear)} ${asset.coin}. Saldo acumulado em 31/12/${year.year}: ${formatQuantity(asset.quantity)} ${asset.coin}. Adquirido em corretora internacional utilizando USDT e recursos próprios. Valores convertidos para BRL conforme cotação do dólar da data de aquisição (R$ ${asset.averageDollarRate.toFixed(2).replace('.', ',')}), incluindo taxas de rede e saque. Ativos mantidos em custódia própria (carteira digital).`
                                                 : `Saldo de exercícios anteriores, sem novas aquisições de ${asset.coin} em ${year.year}. Saldo em 31/12/${year.year}: ${formatQuantity(asset.quantity)} ${asset.coin}. Ativos em custódia própria (carteira digital).`;
@@ -3226,7 +3285,7 @@ export default function App() {
                                           </Text>
                                           <Text style={styles.declarationReason}>
                                             {(() => {
-                                              const boughtInYear = purchases.filter(p => p.coin === asset.coin && new Date(p.date).getFullYear().toString() === year.year).reduce((sum, p) => sum + p.quantity, 0);
+                                              const boughtInYear = purchases.filter(p => p.coin === asset.coin && new Date(p.date).getFullYear().toString() === year.year).reduce((sum, p) => sum + p.quantity, 0) * decPct;
                                               return boughtInYear > 0
                                                 ? `Adquirido no exercício de ${year.year}: ${formatQuantity(boughtInYear)} ${asset.coin}. Saldo acumulado em 31/12/${year.year}: ${formatQuantity(asset.quantity)} ${asset.coin}. Adquirido em corretora internacional utilizando USDT e recursos próprios. Valores convertidos para BRL conforme cotação do dólar da data de aquisição (R$ ${asset.averageDollarRate.toFixed(2).replace('.', ',')}), incluindo taxas de rede e saque. Ativos mantidos em custódia própria (carteira digital).`
                                                 : `Saldo de exercícios anteriores, sem novas aquisições de ${asset.coin} em ${year.year}. Saldo em 31/12/${year.year}: ${formatQuantity(asset.quantity)} ${asset.coin}. Ativos em custódia própria (carteira digital).`;
@@ -3641,7 +3700,7 @@ export default function App() {
                           style={styles.pdfButton}
                           onPress={async () => {
                             try {
-                              const html = generateTaxReportHTML(year, sales, purchases);
+                              const html = generateTaxReportHTML(year, sales, purchases, decPct);
                               const { uri } = await Print.printToFileAsync({ html, base64: false });
                               const fileName = `RelatorioFiscal_${year.year}.pdf`;
                               const available = await Sharing.isAvailableAsync();
@@ -6620,6 +6679,77 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     borderLeftColor: '#667eea',
     backgroundColor: '#F5F6FF',
+  },
+  declPercentBox: {
+    backgroundColor: '#F0F4FF',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 18,
+    borderWidth: 1.5,
+    borderColor: '#C7D2FE',
+  },
+  declPercentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  declPercentTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#4338CA',
+  },
+  declPercentBadge: {
+    backgroundColor: '#E0E7FF',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  declPercentBadgePartial: {
+    backgroundColor: '#FEF3C7',
+  },
+  declPercentBadgeText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#4338CA',
+  },
+  declPercentBadgeTextPartial: {
+    color: '#92400E',
+  },
+  declPercentSubtitle: {
+    fontSize: 11,
+    color: '#6366F1',
+    lineHeight: 16,
+  },
+  declPercentBtn: {
+    backgroundColor: '#fff',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    marginRight: 8,
+    borderWidth: 1.5,
+    borderColor: '#C7D2FE',
+  },
+  declPercentBtnActive: {
+    backgroundColor: '#4338CA',
+    borderColor: '#4338CA',
+  },
+  declPercentBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#4338CA',
+  },
+  declPercentBtnTextActive: {
+    color: '#fff',
+  },
+  declPercentWarning: {
+    marginTop: 10,
+    fontSize: 12,
+    color: '#92400E',
+    backgroundColor: '#FEF3C7',
+    borderRadius: 8,
+    padding: 8,
+    fontWeight: '600',
   },
   pdfButton: {
     backgroundColor: '#667eea',
