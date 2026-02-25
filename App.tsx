@@ -2712,6 +2712,8 @@ export default function App() {
                 const hasLoss = year.netResult < 0;
                 const hadCompensation = year.accumulatedLoss > 0;
                 const decPct = (declarationPercent[year.year] ?? 100) / 100;
+                const prevYearKey = String(parseInt(year.year) - 1);
+                const prevDecPct = (declarationPercent[prevYearKey] ?? 100) / 100;
                 const declAdjAssets = (year.patrimonyEndAssets || []).map((a: any) => ({
                   ...a,
                   quantity: a.quantity * decPct,
@@ -2828,8 +2830,8 @@ export default function App() {
                         <View style={styles.detailSection}>
                           <Text style={styles.detailSectionTitle}>🏠 Bens e Direitos (31/12)</Text>
                           <View style={styles.detailRow}>
-                            <Text style={styles.detailLabel}>Ano Anterior ({parseInt(year.year) - 1}):</Text>
-                            <Text style={styles.detailValue}>{formatCurrency(year.patrimonyStart)}</Text>
+                            <Text style={styles.detailLabel}>Ano Anterior ({parseInt(year.year) - 1}){prevDecPct < 1 ? ` (${Math.round(prevDecPct * 100)}%)` : ''}:</Text>
+                            <Text style={styles.detailValue}>{formatCurrency(year.patrimonyStart * prevDecPct)}</Text>
                           </View>
                           <View style={styles.detailRow}>
                             <Text style={styles.detailLabel}>Ano Atual ({year.year}){decPct < 1 ? ` (${Math.round(decPct * 100)}%)` : ''}:</Text>
@@ -2839,9 +2841,9 @@ export default function App() {
                             <Text style={styles.detailLabelBold}>Variação:</Text>
                             <Text style={[
                               styles.detailValueBold,
-                              (year.patrimonyEnd - year.patrimonyStart) >= 0 ? styles.profit : styles.loss
+                              (year.patrimonyEnd * decPct - year.patrimonyStart * prevDecPct) >= 0 ? styles.profit : styles.loss
                             ]}>
-                              {formatCurrency(year.patrimonyEnd * decPct - year.patrimonyStart)}
+                              {formatCurrency(year.patrimonyEnd * decPct - year.patrimonyStart * prevDecPct)}
                             </Text>
                           </View>
                           
@@ -2893,7 +2895,7 @@ export default function App() {
                                       if (code === '08.01') {
                                         assets.forEach((asset) => {
                                           const prev = year.patrimonyStartAssets?.find((p: any) => p.coin === asset.coin);
-                                          const prevValue = prev ? prev.totalCost : 0;
+                                          const prevValue = prev ? prev.totalCost * prevDecPct : 0;
                                           fullText += `${asset.coin} — (Código ${code})\n`;
                                           fullText += `Situação em 31/12/${prevYear}: ${formatCurrency(prevValue)}\n`;
                                           const boughtInYear = purchases.filter(p => p.coin === asset.coin && new Date(p.date).getFullYear().toString() === year.year).reduce((sum, p) => sum + p.quantity, 0) * decPct;
@@ -2906,7 +2908,7 @@ export default function App() {
                                         const totalValue = assets.reduce((sum, a) => sum + a.totalCost, 0);
                                         const totalPrevValue = assets.reduce((sum, a) => {
                                           const prev = year.patrimonyStartAssets?.find((p: any) => p.coin === a.coin);
-                                          return sum + (prev ? prev.totalCost : 0);
+                                          return sum + (prev ? prev.totalCost * prevDecPct : 0);
                                         }, 0);
                                         const coinList = assets.map(a => a.coin).join(', ');
                                         const avgRateStable = totalValue > 0 ? assets.reduce((s: number, a: any) => s + a.totalCost * (a.averageDollarRate || 0), 0) / totalValue : 0;
@@ -2920,7 +2922,7 @@ export default function App() {
                                         
                                         bigAssets.forEach((asset) => {
                                           const prev = year.patrimonyStartAssets?.find((p: any) => p.coin === asset.coin);
-                                          const prevValue = prev ? prev.totalCost : 0;
+                                          const prevValue = prev ? prev.totalCost * prevDecPct : 0;
                                           const boughtInYear = purchases.filter(p => p.coin === asset.coin && new Date(p.date).getFullYear().toString() === year.year).reduce((sum, p) => sum + p.quantity, 0) * decPct;
                                           fullText += `${asset.coin} — (Código ${code})\n`;
                                           fullText += `Situação em 31/12/${prevYear}: ${formatCurrency(prevValue)}\n`;
@@ -2934,7 +2936,7 @@ export default function App() {
                                           const totalValue = smallAssets.reduce((sum, a) => sum + a.totalCost, 0);
                                           const totalPrevValue = smallAssets.reduce((sum, a) => {
                                             const prev = year.patrimonyStartAssets?.find((p: any) => p.coin === a.coin);
-                                            return sum + (prev ? prev.totalCost : 0);
+                                            return sum + (prev ? prev.totalCost * prevDecPct : 0);
                                           }, 0);
                                           const coinList = smallAssets.map(a => a.coin).join(', ');
                                           const avgRateSmall = totalValue > 0 ? smallAssets.reduce((s: number, a: any) => s + a.totalCost * (a.averageDollarRate || 0), 0) / totalValue : 0;
@@ -2976,7 +2978,7 @@ export default function App() {
                                   if (code === '08.01') {
                                     assets.forEach((asset, idx) => {
                                       const prevYearAsset = year.patrimonyStartAssets?.find((p: any) => p.coin === asset.coin);
-                                      const prevValue = prevYearAsset ? prevYearAsset.totalCost : 0;
+                                      const prevValue = prevYearAsset ? prevYearAsset.totalCost * prevDecPct : 0;
                                       
                                       renderItems.push(
                                         <View key={`${code}-${idx}`} style={styles.assetItem}>
@@ -3007,7 +3009,7 @@ export default function App() {
                                     const totalValue = assets.reduce((sum, a) => sum + a.totalCost, 0);
                                     const totalPrevValue = assets.reduce((sum, a) => {
                                       const prev = year.patrimonyStartAssets?.find((p: any) => p.coin === a.coin);
-                                      return sum + (prev ? prev.totalCost : 0);
+                                      return sum + (prev ? prev.totalCost * prevDecPct : 0);
                                     }, 0);
                                     const coinList = assets.map(a => a.coin).join(', ');
                                     
@@ -3040,7 +3042,7 @@ export default function App() {
                                     // Mostrar grandes individualmente
                                     bigAssets.forEach((asset, idx) => {
                                       const prevYearAsset = year.patrimonyStartAssets?.find((p: any) => p.coin === asset.coin);
-                                      const prevValue = prevYearAsset ? prevYearAsset.totalCost : 0;
+                                      const prevValue = prevYearAsset ? prevYearAsset.totalCost * prevDecPct : 0;
                                       
                                       renderItems.push(
                                         <View key={`${code}-big-${idx}`} style={styles.assetItem}>
@@ -3070,7 +3072,7 @@ export default function App() {
                                       const totalValue = smallAssets.reduce((sum, a) => sum + a.totalCost, 0);
                                       const totalPrevValue = smallAssets.reduce((sum, a) => {
                                         const prev = year.patrimonyStartAssets?.find((p: any) => p.coin === a.coin);
-                                        return sum + (prev ? prev.totalCost : 0);
+                                        return sum + (prev ? prev.totalCost * prevDecPct : 0);
                                       }, 0);
                                       const coinList = smallAssets.map(a => a.coin).join(', ');
                                       
