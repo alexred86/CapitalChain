@@ -2714,11 +2714,21 @@ export default function App() {
                 const decPct = (declarationPercent[year.year] ?? 100) / 100;
                 const prevYearKey = String(parseInt(year.year) - 1);
                 const prevDecPct = (declarationPercent[prevYearKey] ?? 100) / 100;
-                const declAdjAssets = (year.patrimonyEndAssets || []).map((a: any) => ({
-                  ...a,
-                  quantity: a.quantity * decPct,
-                  totalCost: a.totalCost * decPct,
-                }));
+                // Por ativo: sem compras no ano → herda % do ano anterior; com compras → usa % do ano atual
+                const declAdjAssets = (year.patrimonyEndAssets || []).map((a: any) => {
+                  const hadPurchasesThisYear = purchases.some(
+                    (p: CryptoPurchase) => p.coin === a.coin && new Date(p.date).getFullYear().toString() === year.year
+                  );
+                  const assetPct = hadPurchasesThisYear ? decPct : prevDecPct;
+                  return {
+                    ...a,
+                    quantity: a.quantity * assetPct,
+                    totalCost: a.totalCost * assetPct,
+                    _assetPct: assetPct,
+                    _hadPurchasesThisYear: hadPurchasesThisYear,
+                  };
+                });
+                const totalDeclPatrimony = declAdjAssets.reduce((sum: number, a: any) => sum + a.totalCost, 0);
                 
                 return (
                   <View key={year.year}>
@@ -2819,7 +2829,7 @@ export default function App() {
                               </ScrollView>
                               {pct < 100 && (
                                 <Text style={styles.declPercentWarning}>
-                                  ⚠️ Declarando {pct}% → Patrimônio ajustado: {formatCurrency(year.patrimonyEnd * pct / 100)}
+                                  ⚠️ Declarando {pct}% (novos aportes) → Patrimônio declarado total: {formatCurrency(totalDeclPatrimony)}
                                 </Text>
                               )}
                             </View>
@@ -2834,16 +2844,16 @@ export default function App() {
                             <Text style={styles.detailValue}>{formatCurrency(year.patrimonyStart * prevDecPct)}</Text>
                           </View>
                           <View style={styles.detailRow}>
-                            <Text style={styles.detailLabel}>Ano Atual ({year.year}){decPct < 1 ? ` (${Math.round(decPct * 100)}%)` : ''}:</Text>
-                            <Text style={styles.detailValue}>{formatCurrency(year.patrimonyEnd * decPct)}</Text>
+                            <Text style={styles.detailLabel}>Ano Atual ({year.year}){decPct < 1 ? ` (${Math.round(decPct * 100)}%)` : ''}{declAdjAssets.some((a: any) => a._assetPct !== decPct) ? ' ⚠️misto' : ''}:</Text>
+                            <Text style={styles.detailValue}>{formatCurrency(totalDeclPatrimony)}</Text>
                           </View>
                           <View style={styles.detailRow}>
                             <Text style={styles.detailLabelBold}>Variação:</Text>
                             <Text style={[
                               styles.detailValueBold,
-                              (year.patrimonyEnd * decPct - year.patrimonyStart * prevDecPct) >= 0 ? styles.profit : styles.loss
+                              (totalDeclPatrimony - year.patrimonyStart * prevDecPct) >= 0 ? styles.profit : styles.loss
                             ]}>
-                              {formatCurrency(year.patrimonyEnd * decPct - year.patrimonyStart * prevDecPct)}
+                              {formatCurrency(totalDeclPatrimony - year.patrimonyStart * prevDecPct)}
                             </Text>
                           </View>
                           
