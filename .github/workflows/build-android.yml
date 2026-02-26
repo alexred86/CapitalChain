@@ -52,49 +52,49 @@ jobs:
       - name: Criar local.properties
         run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties
 
-      # ── 8. Decodificar keystore (se secret KEYSTORE_BASE64 estiver definido) ─
-      - name: Decodificar keystore (release)
-        if: ${{ env.HAS_KEYSTORE == 'true' }}
-        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ${{ runner.temp }}/release.keystore
-        env:
-          HAS_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 != '' }}
+      # ── 8. Preparar keystore para assinatura ────────────────────────────────
+      #   Se KEYSTORE_BASE64 estiver configurado como secret, usa ele.
+      #   Caso contrário, gera um keystore auto-assinado temporário para que
+      #   o APK release seja instalável (bundle JS embarcado = funciona offline).
+      - name: Preparar keystore
+        id: keystore
+        run: |
+          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ${{ runner.temp }}/release.keystore
+            echo "store_file=${{ runner.temp }}/release.keystore" >> $GITHUB_OUTPUT
+            echo "store_pass=${{ secrets.KEYSTORE_PASSWORD }}"    >> $GITHUB_OUTPUT
+            echo "key_alias=${{ secrets.KEY_ALIAS }}"             >> $GITHUB_OUTPUT
+            echo "key_pass=${{ secrets.KEY_PASSWORD }}"           >> $GITHUB_OUTPUT
+          else
+            keytool -genkeypair -v \
+              -keystore ${{ runner.temp }}/release.keystore \
+              -alias capitalchain \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass android123 -keypass android123 \
+              -dname "CN=CapitalChain, O=Dev, C=BR"
+            echo "store_file=${{ runner.temp }}/release.keystore" >> $GITHUB_OUTPUT
+            echo "store_pass=android123"    >> $GITHUB_OUTPUT
+            echo "key_alias=capitalchain"  >> $GITHUB_OUTPUT
+            echo "key_pass=android123"     >> $GITHUB_OUTPUT
+          fi
 
-      # ── 9. Build APK release (com assinatura — requer 4 secrets) ────────────
-      #   Secrets necessários no repositório GitHub:
-      #     KEYSTORE_BASE64   → keystore em base64  (cat release.keystore | base64)
-      #     KEYSTORE_PASSWORD → senha do keystore
-      #     KEY_ALIAS         → alias da chave
-      #     KEY_PASSWORD      → senha da chave
-      - name: Build APK (release com assinatura)
-        if: ${{ env.HAS_KEYSTORE == 'true' }}
+      # ── 9. Build APK release (bundle JS embarcado — funciona sem Metro) ──────
+      #   assembleRelease sempre embarca o bundle JS → APK funciona offline.
+      - name: Build APK release
         run: |
           cd android
           chmod +x gradlew
           ./gradlew assembleRelease \
-            -Pandroid.injected.signing.store.file=${{ runner.temp }}/release.keystore \
-            -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
-            -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
-            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
-        env:
-          HAS_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 != '' }}
+            -Pandroid.injected.signing.store.file=${{ steps.keystore.outputs.store_file }} \
+            -Pandroid.injected.signing.store.password=${{ steps.keystore.outputs.store_pass }} \
+            -Pandroid.injected.signing.key.alias=${{ steps.keystore.outputs.key_alias }} \
+            -Pandroid.injected.signing.key.password=${{ steps.keystore.outputs.key_pass }}
 
-      # ── 10. Build APK debug (sem secrets — funciona imediatamente) ───────────
-      - name: Build APK (debug — sem keystore)
-        if: ${{ env.HAS_KEYSTORE != 'true' }}
-        run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleDebug
-        env:
-          HAS_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 != '' }}
-
-      # ── 11. Upload do APK como artefato ──────────────────────────────────────
+      # ── 10. Upload do APK como artefato ─────────────────────────────────────
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: CapitalChain-build-${{ github.run_number }}
-          path: |
-            android/app/build/outputs/apk/release/app-release*.apk
-            android/app/build/outputs/apk/debug/app-debug*.apk
+          path: android/app/build/outputs/apk/release/app-release*.apk
           if-no-files-found: error
           retention-days: 14

@@ -2906,13 +2906,13 @@ export default function App() {
                                         assets.forEach((asset) => {
                                           const prev = year.patrimonyStartAssets?.find((p: any) => p.coin === asset.coin);
                                           const prevValue = prev ? prev.totalCost * prevDecPct : 0;
-                                          fullText += `${asset.coin} — (Código ${code})\n`;
+                                          fullText += `${asset.coin}\nGrupo 08 – Criptoativos – Código 01\n`;
                                           fullText += `Situação em 31/12/${prevYear}: ${formatCurrency(prevValue)}\n`;
                                           const boughtInYear = purchases.filter(p => p.coin === asset.coin && new Date(p.date).getFullYear().toString() === year.year).reduce((sum, p) => sum + p.quantity, 0) * decPct;
                                           fullText += `Situação em 31/12/${year.year}: ${formatCurrency(asset.totalCost)}\n`;
                                           fullText += boughtInYear > 0
-                                            ? `Adquirido no exercício de ${year.year}: ${formatQuantity(boughtInYear)} ${asset.coin}. Saldo acumulado em 31/12/${year.year}: ${formatQuantity(asset.quantity)} ${asset.coin}. Adquirido em corretora internacional utilizando USDT e recursos próprios. Valores convertidos para BRL conforme cotação do dólar da data de aquisição (R$ ${asset.averageDollarRate.toFixed(2).replace('.', ',')}), incluindo taxas de rede e saque. Ativos mantidos em custódia própria (carteira digital).\n\n`
-                                            : `Saldo de exercícios anteriores, sem novas aquisições de ${asset.coin} em ${year.year}. Saldo em 31/12/${year.year}: ${formatQuantity(asset.quantity)} ${asset.coin}. Ativos em custódia própria (carteira digital).\n\n`;
+                                            ? `Adquirido no exercício de ${year.year}: ${formatQuantity(boughtInYear)} ${asset.coin}. Saldo acumulado em 31/12/${year.year}: ${formatQuantity(asset.quantity)} ${asset.coin}. Custo de aquisição total em corretora internacional utilizando USDT e recursos próprios. Valores convertidos para BRL conforme cotação do dólar na data de cada aquisição (média R$ ${asset.averageDollarRate.toFixed(2).replace('.', ',')}), já incluindo taxas de rede e saque. Ativo mantido em custódia própria (carteira digital / autocustódia).\n\n`
+                                            : `Saldo de exercícios anteriores. Saldo em 31/12/${year.year}: ${formatQuantity(asset.quantity)} ${asset.coin}. Ativo mantido em custódia própria (carteira digital / autocustódia).\n\n`;
                                         });
                                       } else if (code === '08.03') {
                                         const totalValue = assets.reduce((sum, a) => sum + a.totalCost, 0);
@@ -2922,10 +2922,10 @@ export default function App() {
                                         }, 0);
                                         const coinList = assets.map(a => a.coin).join(', ');
                                         const avgRateStable = totalValue > 0 ? assets.reduce((s: number, a: any) => s + a.totalCost * (a.averageDollarRate || 0), 0) / totalValue : 0;
-                                        fullText += `Stablecoins — (Código ${code})\n`;
+                                        fullText += `Stablecoins (${coinList})\nGrupo 08 – Criptoativos – Código 03\n`;
                                         fullText += `Situação em 31/12/${prevYear}: ${formatCurrency(totalPrevValue)}\n`;
                                         fullText += `Situação em 31/12/${year.year}: ${formatCurrency(totalValue)}\n`;
-                                        fullText += `Conjunto de stablecoins (${coinList}) adquiridas em corretoras internacionais com recursos próprios e mantidas em custódia própria (carteira digital). Valores convertidos para BRL conforme cotação do dólar (R$ ${avgRateStable.toFixed(2).replace('.', ',')})) das datas de aquisição, já incluindo taxas de rede e saque.\n\n`;
+                                        fullText += `Conjunto de stablecoins (${coinList}) adquiridas em corretoras internacionais com recursos próprios e mantidas em custódia própria (carteira digital). Custo de aquisição convertido para BRL conforme cotação do dólar (média R$ ${avgRateStable.toFixed(2).replace('.', ',')}) nas datas de aquisição, já incluindo taxas de rede e saque.\n\n`;
                                       } else if (code === '08.02') {
                                         const bigAssets = assets.filter(a => a.totalCost >= 5000);
                                         const smallAssets = assets.filter(a => a.totalCost < 5000);
@@ -2934,12 +2934,12 @@ export default function App() {
                                           const prev = year.patrimonyStartAssets?.find((p: any) => p.coin === asset.coin);
                                           const prevValue = prev ? prev.totalCost * prevDecPct : 0;
                                           const boughtInYear = purchases.filter(p => p.coin === asset.coin && new Date(p.date).getFullYear().toString() === year.year).reduce((sum, p) => sum + p.quantity, 0) * decPct;
-                                          fullText += `${asset.coin} — (Código ${code})\n`;
+                                          fullText += `${asset.coin}\nGrupo 08 – Criptoativos – Código 02\n`;
                                           fullText += `Situação em 31/12/${prevYear}: ${formatCurrency(prevValue)}\n`;
                                           fullText += `Situação em 31/12/${year.year}: ${formatCurrency(asset.totalCost)}\n`;
                                           fullText += boughtInYear > 0
-                                            ? `Adquirido no exercício de ${year.year}: ${formatQuantity(boughtInYear)} ${asset.coin}. Saldo acumulado em 31/12/${year.year}: ${formatQuantity(asset.quantity)} ${asset.coin}. Adquirido em corretora internacional utilizando USDT e recursos próprios. Valores convertidos para BRL conforme cotação do dólar da data de aquisição (R$ ${asset.averageDollarRate.toFixed(2).replace('.', ',')}), incluindo taxas de rede e saque. Ativos mantidos em custódia própria (carteira digital).\n\n`
-                                            : `Saldo de exercícios anteriores, sem novas aquisições de ${asset.coin} em ${year.year}. Saldo em 31/12/${year.year}: ${formatQuantity(asset.quantity)} ${asset.coin}. Ativos em custódia própria (carteira digital).\n\n`;
+                                            ? `Adquirido no exercício de ${year.year}: ${formatQuantity(boughtInYear)} ${asset.coin}. Saldo acumulado em 31/12/${year.year}: ${formatQuantity(asset.quantity)} ${asset.coin}. Custo de aquisição total em corretora internacional utilizando USDT e recursos próprios. Valores convertidos para BRL conforme cotação do dólar na data de cada aquisição (média R$ ${asset.averageDollarRate.toFixed(2).replace('.', ',')}), já incluindo taxas de rede e saque. Ativo mantido em custódia própria (carteira digital / autocustódia).\n\n`
+                                            : `Saldo de exercícios anteriores. Saldo em 31/12/${year.year}: ${formatQuantity(asset.quantity)} ${asset.coin}. Ativo mantido em custódia própria (carteira digital / autocustódia).\n\n`;
                                         });
                                         
                                         if (smallAssets.length > 0) {
@@ -2950,10 +2950,10 @@ export default function App() {
                                           }, 0);
                                           const coinList = smallAssets.map(a => a.coin).join(', ');
                                           const avgRateSmall = totalValue > 0 ? smallAssets.reduce((s: number, a: any) => s + a.totalCost * (a.averageDollarRate || 0), 0) / totalValue : 0;
-                                          fullText += `Outras moedas digitais com custo < R$ 5.000 (CONSOLIDADAS) — (Código ${code})\n`;
+                                          fullText += `Outras moedas digitais (consolidadas)\nGrupo 08 – Criptoativos – Código 02\n`;
                                           fullText += `Situação em 31/12/${prevYear}: ${formatCurrency(totalPrevValue)}\n`;
                                           fullText += `Situação em 31/12/${year.year}: ${formatCurrency(totalValue)}\n`;
-                                          fullText += `Conjunto de criptoativos classificados como "outras moedas digitais", adquiridos em corretoras internacionais com recursos próprios e mantidos em custódia própria. Inclui: ${coinList}. Todos os ativos possuem custo individual inferior a R$ 5.000. Valores convertidos para BRL conforme cotação do dólar (R$ ${avgRateSmall.toFixed(2).replace('.', ',')})) das datas de aquisição, já incluindo taxas de rede e saque.\n\n`;
+                                          fullText += `Conjunto de criptoativos classificados como "outras moedas digitais", cada um com custo individual de aquisição inferior a R$ 5.000,00. Adquiridos em corretoras internacionais com recursos próprios e mantidos em custódia própria. Inclui: ${coinList}. Valores convertidos para BRL conforme cotação do dólar (média R$ ${avgRateSmall.toFixed(2).replace(".", ",")}) nas datas de aquisição, já incluindo taxas de rede e saque.\n\n`;
                                         }
                                       }
                                     });
@@ -2993,7 +2993,10 @@ export default function App() {
                                       renderItems.push(
                                         <View key={`${code}-${idx}`} style={styles.assetItem}>
                                           <Text style={[styles.assetCoin, { color: '#667eea' }]}>
-                                            {asset.coin} — (Código {code})
+                                            {asset.coin}
+                                          </Text>
+                                          <Text style={[styles.assetCoin, { color: '#888', fontSize: 12 }]}>
+                                            {'Grupo 08 – Criptoativos – Código 01'}
                                           </Text>
                                           <Text style={styles.assetQuantity}>
                                             Situação em 31/12/{prevYear}: {formatCurrency(prevValue)}
@@ -3005,8 +3008,8 @@ export default function App() {
                                             {(() => {
                                               const boughtInYear = purchases.filter(p => p.coin === asset.coin && new Date(p.date).getFullYear().toString() === year.year).reduce((sum, p) => sum + p.quantity, 0) * decPct;
                                               return boughtInYear > 0
-                                                ? `Adquirido no exercício de ${year.year}: ${formatQuantity(boughtInYear)} ${asset.coin}. Saldo acumulado em 31/12/${year.year}: ${formatQuantity(asset.quantity)} ${asset.coin}. Adquirido em corretora internacional utilizando USDT e recursos próprios. Valores convertidos para BRL conforme cotação do dólar da data de aquisição (R$ ${asset.averageDollarRate.toFixed(2).replace('.', ',')}), incluindo taxas de rede e saque. Ativos mantidos em custódia própria (carteira digital).`
-                                                : `Saldo de exercícios anteriores, sem novas aquisições de ${asset.coin} em ${year.year}. Saldo em 31/12/${year.year}: ${formatQuantity(asset.quantity)} ${asset.coin}. Ativos em custódia própria (carteira digital).`;
+                                                ? `Adquirido no exercício de ${year.year}: ${formatQuantity(boughtInYear)} ${asset.coin}. Saldo acumulado em 31/12/${year.year}: ${formatQuantity(asset.quantity)} ${asset.coin}. Custo de aquisição total em corretora internacional utilizando USDT e recursos próprios. Valores convertidos para BRL conforme cotação do dólar na data de cada aquisição (média R$ ${asset.averageDollarRate.toFixed(2).replace('.', ',')}), já incluindo taxas de rede e saque. Ativo mantido em custódia própria (carteira digital / autocustódia).`
+                                                : `Saldo de exercícios anteriores. Saldo em 31/12/${year.year}: ${formatQuantity(asset.quantity)} ${asset.coin}. Ativo mantido em custódia própria (carteira digital / autocustódia).`;
                                             })()}
                                           </Text>
                                         </View>
@@ -3027,7 +3030,10 @@ export default function App() {
                                     renderItems.push(
                                       <View key={`${code}-consolidated`} style={styles.assetItem}>
                                         <Text style={[styles.assetCoin, { color: '#667eea' }]}>
-                                          Stablecoins — (Código {code})
+                                          {'Stablecoins ('}{coinList}{')'}
+                                        </Text>
+                                        <Text style={[styles.assetCoin, { color: '#888', fontSize: 12 }]}>
+                                          {'Grupo 08 – Criptoativos – Código 03'}
                                         </Text>
                                         <Text style={styles.assetQuantity}>
                                           Situação em 31/12/{prevYear}: {formatCurrency(totalPrevValue)}
@@ -3036,7 +3042,7 @@ export default function App() {
                                           Situação em 31/12/{year.year}: {formatCurrency(totalValue)}
                                         </Text>
                                         <Text style={styles.declarationReason}>
-                                          Conjunto de stablecoins ({coinList}) adquiridas em corretoras internacionais com recursos próprios e mantidas em custódia própria (carteira digital). Valores convertidos para BRL conforme cotação do dólar (R$ {avgRateStable.toFixed(2).replace('.', ',')})) das datas de aquisição, já incluindo taxas de rede e saque.
+                                          Conjunto de stablecoins ({coinList}) adquiridas em corretoras internacionais com recursos próprios e mantidas em custódia própria (carteira digital). Custo de aquisição convertido para BRL conforme cotação do dólar (média R$ {avgRateStable.toFixed(2).replace('.', ',')}) nas datas de aquisição, já incluindo taxas de rede e saque.
                                         </Text>
                                       </View>
                                     );
@@ -3057,7 +3063,10 @@ export default function App() {
                                       renderItems.push(
                                         <View key={`${code}-big-${idx}`} style={styles.assetItem}>
                                           <Text style={[styles.assetCoin, { color: '#667eea' }]}>
-                                            {asset.coin} — (Código {code})
+                                            {asset.coin}
+                                          </Text>
+                                          <Text style={[styles.assetCoin, { color: '#888', fontSize: 12 }]}>
+                                            {'Grupo 08 – Criptoativos – Código 02'}
                                           </Text>
                                           <Text style={styles.assetQuantity}>
                                             Situação em 31/12/{prevYear}: {formatCurrency(prevValue)}
@@ -3069,8 +3078,8 @@ export default function App() {
                                             {(() => {
                                               const boughtInYear = purchases.filter(p => p.coin === asset.coin && new Date(p.date).getFullYear().toString() === year.year).reduce((sum, p) => sum + p.quantity, 0) * decPct;
                                               return boughtInYear > 0
-                                                ? `Adquirido no exercício de ${year.year}: ${formatQuantity(boughtInYear)} ${asset.coin}. Saldo acumulado em 31/12/${year.year}: ${formatQuantity(asset.quantity)} ${asset.coin}. Adquirido em corretora internacional utilizando USDT e recursos próprios. Valores convertidos para BRL conforme cotação do dólar da data de aquisição (R$ ${asset.averageDollarRate.toFixed(2).replace('.', ',')}), incluindo taxas de rede e saque. Ativos mantidos em custódia própria (carteira digital).`
-                                                : `Saldo de exercícios anteriores, sem novas aquisições de ${asset.coin} em ${year.year}. Saldo em 31/12/${year.year}: ${formatQuantity(asset.quantity)} ${asset.coin}. Ativos em custódia própria (carteira digital).`;
+                                                ? `Adquirido no exercício de ${year.year}: ${formatQuantity(boughtInYear)} ${asset.coin}. Saldo acumulado em 31/12/${year.year}: ${formatQuantity(asset.quantity)} ${asset.coin}. Custo de aquisição total em corretora internacional utilizando USDT e recursos próprios. Valores convertidos para BRL conforme cotação do dólar na data de cada aquisição (média R$ ${asset.averageDollarRate.toFixed(2).replace('.', ',')}), já incluindo taxas de rede e saque. Ativo mantido em custódia própria (carteira digital / autocustódia).`
+                                                : `Saldo de exercícios anteriores. Saldo em 31/12/${year.year}: ${formatQuantity(asset.quantity)} ${asset.coin}. Ativo mantido em custódia própria (carteira digital / autocustódia).`;
                                             })()}
                                           </Text>
                                         </View>
@@ -3090,7 +3099,10 @@ export default function App() {
                                       renderItems.push(
                                         <View key={`${code}-small-consolidated`} style={styles.assetItem}>
                                           <Text style={[styles.assetCoin, { color: '#667eea' }]}>
-                                            Outras moedas digitais com custo {'<'} R$ 5.000 (CONSOLIDADAS) — (Código {code})
+                                            {'Outras moedas digitais (consolidadas)'}
+                                          </Text>
+                                          <Text style={[styles.assetCoin, { color: '#888', fontSize: 12 }]}>
+                                            {'Grupo 08 – Criptoativos – Código 02'}
                                           </Text>
                                           <Text style={styles.assetQuantity}>
                                             Situação em 31/12/{prevYear}: {formatCurrency(totalPrevValue)}
@@ -3099,7 +3111,7 @@ export default function App() {
                                             Situação em 31/12/{year.year}: {formatCurrency(totalValue)}
                                           </Text>
                                           <Text style={styles.declarationReason}>
-                                            Conjunto de criptoativos classificados como "outras moedas digitais", adquiridos em corretoras internacionais com recursos próprios e mantidos em custódia própria. Inclui: {coinList}. Todos os ativos possuem custo individual inferior a R$ 5.000. Valores convertidos para BRL conforme cotação do dólar (R$ {avgRateSmall.toFixed(2).replace('.', ',')})) das datas de aquisição, já incluindo taxas de rede e saque.
+                                            Conjunto de criptoativos classificados como "outras moedas digitais", cada um com custo individual de aquisição inferior a R$ 5.000,00. Adquiridos em corretoras internacionais com recursos próprios e mantidos em custódia própria. Inclui: {coinList}. Valores convertidos para BRL conforme cotação do dólar (média R$ {avgRateSmall.toFixed(2).replace(".", ",")}) nas datas de aquisição, já incluindo taxas de rede e saque.
                                           </Text>
                                         </View>
                                       );
