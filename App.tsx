@@ -3170,7 +3170,7 @@ export default function App() {
                                     text += '='.repeat(50) + '\n\n';
 
                                     if (exemptSales.length > 0) {
-                                      text += '── RENDIMENTOS ISENTOS (Exchange Nacional < R$ 35.000/mês) ──\n';
+                                      text += '── RENDIMENTOS ISENTOS (Exchange Nacional — somatório mensal de vendas < R$ 35.000) ──\n';
                                       text += 'Ficha: Rendimentos Isentos e Não Tributáveis → Código 26\n\n';
                                       exemptSales.forEach((s, i) => {
                                         const valueBRL = s.priceSold * s.dollarRate;
@@ -3178,7 +3178,7 @@ export default function App() {
                                         const costBRL = (s.priceSold - s.profit) * s.dollarRate;
                                         text += `${i+1}. ${new Date(s.date).toLocaleDateString('pt-BR')} — ${s.coin}\n`;
                                         text += `   Beneficiário: [Seu nome/CPF]\n`;
-                                        text += `   Descrição: Ganho de capital na alienação de ${formatQuantity(s.quantity)} ${s.coin} em exchange nacional. Valor total de vendas no mês inferior a R$ 35.000,00 — isento conforme art. 22, § 2º, Lei 9.250/95. Valor recebido: R$ ${valueBRL.toFixed(2).replace('.', ',')}. Custo de aquisição: R$ ${costBRL.toFixed(2).replace('.', ',')}. Lucro: R$ ${gainBRL.toFixed(2).replace('.', ',')}\n\n`;
+                                        text += `   Descrição: Ganho de capital na alienação de ${formatQuantity(s.quantity)} ${s.coin} em exchange nacional (corretora regulada no Brasil) em ${new Date(s.date).toLocaleDateString('pt-BR')}. O somatório de todas as alienações de criptoativos realizadas no mês foi inferior a R$ 35.000,00 — condição que garante a isenção do imposto de renda sobre o ganho de capital, nos termos do art. 22, § 1º da Lei 9.250/1995, aplicável a ativos virtuais conforme Lei 14.478/2022 e IN RFB 1.888/2019. Valor recebido: R$ ${valueBRL.toFixed(2).replace('.', ',')}. Custo de aquisição: R$ ${costBRL.toFixed(2).replace('.', ',')}. Lucro: R$ ${gainBRL.toFixed(2).replace('.', ',')}.\n\n`;
                                       });
                                       const totalExemptGain = exemptSales.reduce((sum, s) => sum + (s.profit * s.dollarRate), 0);
                                       text += `   → Valor total a lançar no campo "Valor": R$ ${totalExemptGain.toFixed(2).replace('.', ',')}\n\n`;
@@ -3262,7 +3262,7 @@ export default function App() {
                                             <Text style={styles.irInstructionText}>Ficha: Rendimentos Isentos e Não Tributáveis</Text>
                                             <Text style={styles.irInstructionText}>Código: 26 — Outros</Text>
                                             <Text style={styles.irInstructionText}>Valor: R$ {gainBRL.toFixed(2).replace('.', ',')}</Text>
-                                            <Text style={styles.irInstructionText}>Descrição: Ganho de capital na alienação de {formatQuantity(s.quantity)} {s.coin} em exchange nacional em {new Date(s.date).toLocaleDateString('pt-BR')}. Valor total de vendas no mês inferior a R$ 35.000,00. Isento conforme art. 22, § 2º, Lei 9.250/95.</Text>
+                                            <Text style={styles.irInstructionText}>Descrição: Ganho de capital na alienação de {formatQuantity(s.quantity)} {s.coin} em exchange nacional (corretora regulada no Brasil) em {new Date(s.date).toLocaleDateString('pt-BR')}. Somatório de todas as alienações de criptoativos no mês inferior a R$ 35.000,00 — isento nos termos do art. 22, § 1º da Lei 9.250/1995, aplicável a ativos virtuais conforme Lei 14.478/2022 e IN RFB 1.888/2019.</Text>
                                           </View>
                                         </View>
                                       );
