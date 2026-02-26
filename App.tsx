@@ -1753,6 +1753,13 @@ export default function App() {
     }
   };
 
+  const openBackupMenu = () => {
+    setBackupData('');
+    setImportData('');
+    setBackupMode('menu');
+    setShowBackupModal(true);
+  };
+
   const copyBackupToClipboard = () => {
     if (backupData) {
       Clipboard.setString(backupData);
@@ -2009,7 +2016,7 @@ export default function App() {
             ))
           )}
           
-          <TouchableOpacity style={styles.backupButton} onPress={exportBackup}>
+          <TouchableOpacity style={styles.backupButton} onPress={openBackupMenu}>
             <Text style={styles.backupButtonText}>💾 Backup/Restaurar Dados</Text>
           </TouchableOpacity>
           
