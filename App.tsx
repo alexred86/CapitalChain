@@ -2248,24 +2248,26 @@ export default function App() {
 
         <ScrollView style={styles.content}>
 
-          {/* Toggle Vender / Converter */}
+          {/* Seletor de Modo — cards grandes e visuais */}
           {!editingSaleId && (
-            <View style={styles.viewModeToggle}>
+            <View style={styles.modeSelectorContainer}>
               <TouchableOpacity
-                style={[styles.toggleButton, activeMode === 'sell' && styles.toggleButtonActive]}
+                style={[styles.modeSelectorCard, activeMode === 'sell' && styles.modeSelectorCardActiveSell]}
                 onPress={() => setSellScreenMode('sell')}
+                activeOpacity={0.85}
               >
-                <Text style={[styles.toggleButtonText, activeMode === 'sell' && styles.toggleButtonTextActive]}>
-                  💱 Vender
-                </Text>
+                <Text style={styles.modeSelectorIcon}>💱</Text>
+                <Text style={[styles.modeSelectorTitle, activeMode === 'sell' && styles.modeSelectorTitleActive]}>Vender</Text>
+                <Text style={[styles.modeSelectorDesc, activeMode === 'sell' && styles.modeSelectorDescActive]}>Converter cripto em dinheiro</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.toggleButton, activeMode === 'convert' && styles.toggleButtonActive]}
+                style={[styles.modeSelectorCard, activeMode === 'convert' && styles.modeSelectorCardActiveConvert]}
                 onPress={() => setSellScreenMode('convert')}
+                activeOpacity={0.85}
               >
-                <Text style={[styles.toggleButtonText, activeMode === 'convert' && styles.toggleButtonTextActive]}>
-                  🔄 Converter
-                </Text>
+                <Text style={styles.modeSelectorIcon}>🔄</Text>
+                <Text style={[styles.modeSelectorTitle, activeMode === 'convert' && styles.modeSelectorTitleActive]}>Converter</Text>
+                <Text style={[styles.modeSelectorDesc, activeMode === 'convert' && styles.modeSelectorDescActive]}>Trocar stablecoin por cripto</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -5991,6 +5993,68 @@ const styles = StyleSheet.create({
   },
   toggleButtonTextActive: {
     color: '#fff',
+  },
+  modeSelectorContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 24,
+  },
+  modeSelectorCard: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    paddingVertical: 22,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#E8EAED',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+  },
+  modeSelectorCardActiveSell: {
+    borderColor: '#667eea',
+    backgroundColor: '#667eea',
+    elevation: 6,
+    shadowColor: '#667eea',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+  },
+  modeSelectorCardActiveConvert: {
+    borderColor: '#34C759',
+    backgroundColor: '#34C759',
+    elevation: 6,
+    shadowColor: '#34C759',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+  },
+  modeSelectorIcon: {
+    fontSize: 34,
+    marginBottom: 10,
+  },
+  modeSelectorTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1C1C1E',
+    marginBottom: 5,
+    letterSpacing: 0.2,
+  },
+  modeSelectorTitleActive: {
+    color: '#fff',
+  },
+  modeSelectorDesc: {
+    fontSize: 12,
+    color: '#8E8E93',
+    textAlign: 'center',
+    fontWeight: '500',
+    lineHeight: 16,
+  },
+  modeSelectorDescActive: {
+    color: 'rgba(255,255,255,0.88)',
   },
   sectionSubtitle: {
     fontSize: 15,
