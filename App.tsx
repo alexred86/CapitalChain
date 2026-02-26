@@ -1675,10 +1675,12 @@ export default function App() {
   const exportBackup = () => {
     try {
       const backup = {
-        version: '1.0',
+        version: '1.1',
         exportDate: new Date().toISOString(),
         purchases: purchases,
         sales: sales,
+        taxLosses: taxLosses,
+        declarationPercent: declarationPercent,
       };
       
       const backupString = JSON.stringify(backup, null, 2);
@@ -1725,9 +1727,14 @@ export default function App() {
         return;
       }
 
+      const extrasMsg = [
+        backup.taxLosses && Object.keys(backup.taxLosses).length > 0 ? '• Prejuízos fiscais acumulados' : '',
+        backup.declarationPercent && Object.keys(backup.declarationPercent).length > 0 ? '• Percentuais de declaração' : '',
+      ].filter(Boolean).join('\n');
+
       Alert.alert(
         'Confirmar Importação',
-        `Isso irá importar:\n• ${backup.purchases.length} compra(s)\n• ${backup.sales.length} venda(s)\n\nDeseja mesclar com dados existentes ou substituir tudo?`,
+        `Isso irá importar:\n• ${backup.purchases.length} compra(s)\n• ${backup.sales.length} venda(s)${extrasMsg ? '\n' + extrasMsg : ''}\n\nDeseja mesclar com dados existentes ou substituir tudo?`,
         [
           { text: 'Cancelar', style: 'cancel' },
           {
@@ -1741,6 +1748,17 @@ export default function App() {
               
               setPurchases(mergedPurchases);
               setSales(mergedSales);
+              
+              if (backup.taxLosses) {
+                const mergedLosses = { ...taxLosses, ...backup.taxLosses };
+                await saveTaxLosses(mergedLosses);
+                setTaxLosses(mergedLosses);
+              }
+              if (backup.declarationPercent) {
+                const mergedPct = { ...declarationPercent, ...backup.declarationPercent };
+                await AsyncStorage.setItem(DECL_PERCENT_KEY, JSON.stringify(mergedPct));
+                setDeclarationPercent(mergedPct);
+              }
               
               setShowBackupModal(false);
               setImportData('');
@@ -1757,6 +1775,15 @@ export default function App() {
               
               setPurchases(backup.purchases);
               setSales(backup.sales);
+              
+              if (backup.taxLosses) {
+                await saveTaxLosses(backup.taxLosses);
+                setTaxLosses(backup.taxLosses);
+              }
+              if (backup.declarationPercent) {
+                await AsyncStorage.setItem(DECL_PERCENT_KEY, JSON.stringify(backup.declarationPercent));
+                setDeclarationPercent(backup.declarationPercent);
+              }
               
               setShowBackupModal(false);
               setImportData('');
