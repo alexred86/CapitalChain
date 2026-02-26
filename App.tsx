@@ -54,6 +54,7 @@ const SALES_STORAGE_KEY = '@crypto_sales';
 const TAX_LOSSES_KEY = '@crypto_tax_losses';
 const HIDE_VALUES_KEY = '@hide_values_pref';
 const DECL_PERCENT_KEY = '@declaration_percent';
+const LAST_BACKUP_KEY = '@last_backup_date';
 
 const formatCurrency = (value: number): string => {
   return new Intl.NumberFormat('en-US', {
@@ -193,6 +194,12 @@ export default function App() {
     fetchDollarRate(); // Buscar cotação do dólar ao iniciar
   }, []);
 
+  useEffect(() => {
+    if (isAuthenticated) {
+      checkBackupReminder();
+    }
+  }, [isAuthenticated]);
+
   const checkBiometricSupport = async () => {
     const compatible = await LocalAuthentication.hasHardwareAsync();
     setIsBiometricSupported(compatible);
@@ -291,6 +298,53 @@ export default function App() {
     const newValue = !hideValues;
     setHideValues(newValue);
     await AsyncStorage.setItem(HIDE_VALUES_KEY, JSON.stringify(newValue));
+  };
+
+  const markBackupDone = async () => {
+    await AsyncStorage.setItem(LAST_BACKUP_KEY, new Date().toISOString());
+  };
+
+  const checkBackupReminder = async () => {
+    try {
+      const lastBackup = await AsyncStorage.getItem(LAST_BACKUP_KEY);
+      if (!lastBackup) {
+        Alert.alert(
+          '💾 Backup recomendado',
+          'Você ainda não fez nenhum backup dos seus dados. Recomendamos fazer um agora para não correr o risco de perder tudo.',
+          [
+            { text: 'Depois', style: 'cancel' },
+            { text: 'Fazer backup', onPress: () => { exportBackup(); } }
+          ]
+        );
+        return;
+      }
+      const daysDiff = Math.floor((Date.now() - new Date(lastBackup).getTime()) / (1000 * 60 * 60 * 24));
+      if (daysDiff >= 7) {
+        Alert.alert(
+          '💾 Backup desatualizado',
+          `Seu último backup foi há ${daysDiff} dia${daysDiff === 1 ? '' : 's'}. Recomendamos atualizar para não perder seus dados.`,
+          [
+            { text: 'Depois', style: 'cancel' },
+            { text: 'Fazer backup', onPress: () => { exportBackup(); } }
+          ]
+        );
+      }
+    } catch (error) {
+      console.error('Erro ao verificar backup:', error);
+    }
+  };
+
+  const promptBackupAfterChange = () => {
+    setTimeout(() => {
+      Alert.alert(
+        '💾 Atualizar backup?',
+        'Seus dados foram alterados. Deseja atualizar o backup agora?',
+        [
+          { text: 'Agora não', style: 'cancel' },
+          { text: 'Fazer backup', onPress: () => { exportBackup(); } }
+        ]
+      );
+    }, 600);
   };
 
   // Determina o código da Receita Federal para cada cripto
@@ -1176,6 +1230,7 @@ export default function App() {
         }
         
         Alert.alert('Sucesso!', 'Compra atualizada com sucesso!');
+        promptBackupAfterChange();
       } else {
         // Adicionar nova compra
         const newPurchase: CryptoPurchase = {
@@ -1199,6 +1254,7 @@ export default function App() {
         }
         
         Alert.alert('Sucesso!', 'Compra registrada com sucesso!');
+        promptBackupAfterChange();
       }
 
       setCoin('');
@@ -1315,6 +1371,7 @@ export default function App() {
         }
 
         Alert.alert('Sucesso!', 'Venda atualizada com sucesso!');
+        promptBackupAfterChange();
       } else {
         // Nova venda
         const newSale: CryptoSale = {
@@ -1345,6 +1402,7 @@ export default function App() {
           'Sucesso!',
           `Venda registrada!\n${profit >= 0 ? 'Lucro' : 'Prejuízo'}: ${formatCurrency(Math.abs(profit))}`
         );
+        promptBackupAfterChange();
       }
 
       setSellCoin('');
@@ -1398,6 +1456,7 @@ export default function App() {
               }
 
               Alert.alert('Sucesso', isConversion ? 'Conversão excluída! Stablecoin retornou ao portfólio.' : 'Compra excluída!');
+              promptBackupAfterChange();
             } catch (error) {
               Alert.alert('Erro', 'Não foi possível excluir');
             }
@@ -1463,6 +1522,7 @@ export default function App() {
               }
 
               Alert.alert('Sucesso', isConversion ? 'Conversão excluída! Stablecoin retornou ao portfólio.' : 'Venda excluída!');
+              promptBackupAfterChange();
             } catch (error) {
               Alert.alert('Erro', 'Não foi possível excluir');
             }
@@ -1702,10 +1762,13 @@ export default function App() {
   const shareBackup = async () => {
     try {
       if (backupData) {
-        await Share.share({
+        const result = await Share.share({
           message: `💾 Backup CapitalChain\n\nData: ${new Date().toLocaleDateString()}\n${purchases.length} compras e ${sales.length} vendas\n\n${backupData}`,
           title: 'Backup CapitalChain'
         });
+        if (result.action === Share.sharedAction) {
+          await markBackupDone();
+        }
       }
     } catch (error) {
       console.error('Erro ao compartilhar:', error);
