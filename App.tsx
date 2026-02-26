@@ -1745,6 +1745,7 @@ export default function App() {
       
       const backupString = JSON.stringify(backup, null, 2);
       setBackupData(backupString);
+      setBackupMode('generate');
       setShowBackupModal(true);
     } catch (error) {
       console.error('Erro ao exportar backup:', error);
