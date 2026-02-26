@@ -82,6 +82,9 @@ jobs:
       #   assembleRelease sempre embarca o bundle JS → APK funciona offline.
       - name: Build APK release
         run: |
+          # Garantir permissão de execução no hermesc (compilador Hermes)
+          find node_modules/react-native/sdks/hermesc -type f -name 'hermesc' -exec chmod +x {} \; 2>/dev/null || true
+          find node_modules/react-native/sdks/hermesc -type f -exec chmod +x {} \; 2>/dev/null || true
           cd android
           chmod +x gradlew
           ./gradlew assembleRelease \
