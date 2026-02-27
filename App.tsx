@@ -187,11 +187,13 @@ export default function App() {
   const [calcQuantity, setCalcQuantity] = useState('');
   const [calcSellPrice, setCalcSellPrice] = useState('');
   const [currentDollarRate, setCurrentDollarRate] = useState<number | null>(null);
+  const [currentBtcPrice, setCurrentBtcPrice] = useState<number | null>(null);
 
   useEffect(() => {
     checkBiometricSupport();
     loadData();
-    fetchDollarRate(); // Buscar cotação do dólar ao iniciar
+    fetchDollarRate();
+    fetchBtcPrice();
   }, []);
 
   useEffect(() => {
@@ -406,6 +408,20 @@ export default function App() {
       console.error('Erro ao buscar cotação:', error);
     }
     return null;
+  };
+
+  const fetchBtcPrice = async () => {
+    try {
+      const response = await fetch(
+        'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd'
+      );
+      const data = await response.json();
+      if (data?.bitcoin?.usd) {
+        setCurrentBtcPrice(data.bitcoin.usd);
+      }
+    } catch (error) {
+      console.error('Erro ao buscar preço do BTC:', error);
+    }
   };
 
   // Calculadora de Imposto Pré-Venda
@@ -1993,6 +2009,12 @@ export default function App() {
               <Text style={styles.homeMetricLabel}>Cotação USD</Text>
               <Text style={styles.homeMetricValue}>
                 {currentDollarRate ? `R$ ${currentDollarRate.toFixed(2).replace('.', ',')}` : 'R$ —'}
+              </Text>
+            </View>
+            <View style={[styles.homeMetricCard, styles.homeMetricCardBtc]}>
+              <Text style={styles.homeMetricLabel}>₿ Bitcoin (BTC)</Text>
+              <Text style={[styles.homeMetricValue, styles.homeMetricBtc]}>
+                {currentBtcPrice ? formatCurrency(currentBtcPrice) : '$ —'}
               </Text>
             </View>
           </View>
@@ -4887,6 +4909,15 @@ const styles = StyleSheet.create({
   },
   homeMetricLoss: {
     color: '#FFB3AE',
+  },
+  homeMetricCardBtc: {
+    backgroundColor: 'rgba(255,159,10,0.22)',
+    borderColor: 'rgba(255,159,10,0.45)',
+    width: '100%',
+    flex: 0,
+  },
+  homeMetricBtc: {
+    color: '#FFD580',
   },
   content: {
     flex: 1,
