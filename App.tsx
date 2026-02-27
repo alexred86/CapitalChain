@@ -56,6 +56,20 @@ const HIDE_VALUES_KEY = '@hide_values_pref';
 const DECL_PERCENT_KEY = '@declaration_percent';
 const LAST_BACKUP_KEY = '@last_backup_date';
 
+const COINGECKO_IDS: {[key: string]: string} = {
+  'BTC': 'bitcoin', 'ETH': 'ethereum', 'SOL': 'solana', 'BNB': 'binancecoin',
+  'XRP': 'ripple', 'ADA': 'cardano', 'DOGE': 'dogecoin', 'DOT': 'polkadot',
+  'AVAX': 'avalanche-2', 'MATIC': 'matic-network', 'LINK': 'chainlink',
+  'LTC': 'litecoin', 'UNI': 'uniswap', 'ATOM': 'cosmos', 'NEAR': 'near',
+  'FTM': 'fantom', 'ALGO': 'algorand', 'VET': 'vechain', 'ICP': 'internet-computer',
+  'FIL': 'filecoin', 'SAND': 'the-sandbox', 'MANA': 'decentraland',
+  'SHIB': 'shiba-inu', 'TRX': 'tron', 'XLM': 'stellar', 'AAVE': 'aave',
+  'GRT': 'the-graph', 'MKR': 'maker', 'ARB': 'arbitrum', 'OP': 'optimism',
+  'INJ': 'injective-protocol', 'SUI': 'sui', 'PEPE': 'pepe', 'WIF': 'dogwifcoin',
+};
+
+const CHART_COLORS = ['#667eea', '#F7931A', '#627EEA', '#00D2FF', '#E84142', '#14F195', '#9945FF', '#F0B90B', '#FF6B6B', '#4ECDC4'];
+
 const formatCurrency = (value: number): string => {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -121,7 +135,7 @@ const formatDate = (dateString: string): string => {
 };
 
 export default function App() {
-  const [screen, setScreen] = useState<'home' | 'add' | 'sell' | 'history' | 'taxes' | 'more'>('home');
+  const [screen, setScreen] = useState<'home' | 'add' | 'sell' | 'history' | 'taxes' | 'more' | 'charts'>('home');
   const [purchases, setPurchases] = useState<CryptoPurchase[]>([]);
   const [sales, setSales] = useState<CryptoSale[]>([]);
   const [taxLosses, setTaxLosses] = useState<{[year: string]: number}>({});
@@ -188,6 +202,7 @@ export default function App() {
   const [calcSellPrice, setCalcSellPrice] = useState('');
   const [currentDollarRate, setCurrentDollarRate] = useState<number | null>(null);
   const [currentBtcPrice, setCurrentBtcPrice] = useState<number | null>(null);
+  const [currentPrices, setCurrentPrices] = useState<{[coin: string]: number}>({});
 
   useEffect(() => {
     checkBiometricSupport();
@@ -195,6 +210,13 @@ export default function App() {
     fetchDollarRate();
     fetchBtcPrice();
   }, []);
+
+  useEffect(() => {
+    if (purchases.length > 0) {
+      const coins = [...new Set(purchases.map(p => p.coin.toUpperCase()))];
+      fetchCoinPrices(coins);
+    }
+  }, [purchases]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -421,6 +443,25 @@ export default function App() {
       }
     } catch (error) {
       console.error('Erro ao buscar preço do BTC:', error);
+    }
+  };
+
+  const fetchCoinPrices = async (coins: string[]) => {
+    try {
+      const ids = coins.map(c => COINGECKO_IDS[c]).filter(Boolean).join(',');
+      if (!ids) return;
+      const response = await fetch(
+        `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`
+      );
+      const data = await response.json();
+      const priceMap: {[coin: string]: number} = {};
+      coins.forEach(coin => {
+        const id = COINGECKO_IDS[coin];
+        if (id && data[id]?.usd) priceMap[coin] = data[id].usd;
+      });
+      setCurrentPrices(priceMap);
+    } catch (e) {
+      console.error('Erro ao buscar preços:', e);
     }
   };
 
@@ -1922,6 +1963,10 @@ export default function App() {
         <Text style={styles.tabIcon}>📋</Text>
         <Text style={screen === 'history' ? styles.tabTextActive : styles.tabText}>Histórico</Text>
       </TouchableOpacity>
+      <TouchableOpacity style={[styles.tab, screen === 'charts' && styles.tabActive]} onPress={() => setScreen('charts')}>
+        <Text style={styles.tabIcon}>📊</Text>
+        <Text style={screen === 'charts' ? styles.tabTextActive : styles.tabText}>Gráficos</Text>
+      </TouchableOpacity>
       <TouchableOpacity style={[styles.tab, (screen === 'more' || screen === 'taxes') && styles.tabActive]} onPress={() => setScreen('more')}>
         <Text style={styles.tabIcon}>⚙️</Text>
         <Text style={(screen === 'more' || screen === 'taxes') ? styles.tabTextActive : styles.tabText}>Mais</Text>
@@ -2708,6 +2753,186 @@ export default function App() {
   }
 
   // TAXES
+  if (screen === 'charts') {
+    const summary = calculateSummary();
+    const totalInvested = summary.reduce((sum, s) => sum + s.totalInvested, 0);
+
+    const cumChartData = (() => {
+      const map = new Map<string, number>();
+      purchases.forEach(p => {
+        const key = p.date.substring(0, 7);
+        map.set(key, (map.get(key) || 0) + p.pricePaid);
+      });
+      let cum = 0;
+      return Array.from(map.entries())
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([key, val]) => { cum += val; return { key, val: cum }; });
+    })();
+
+    const profitData = (() => {
+      const map = new Map<string, number>();
+      sales.forEach(s => {
+        const key = s.date.substring(0, 7);
+        map.set(key, (map.get(key) || 0) + s.profit);
+      });
+      return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    })();
+
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>📊 Gráficos</Text>
+        </View>
+        <ScrollView style={styles.content}>
+
+          {/* Distribuição do portfólio */}
+          <View style={styles.chartCard}>
+            <Text style={styles.chartTitle}>🥧 Distribuição do Portfólio</Text>
+            {summary.length > 0 && totalInvested > 0 ? (
+              <>
+                <View style={styles.stackedBar}>
+                  {summary.map((item, i) => (
+                    <View
+                      key={item.coin}
+                      style={[styles.stackedBarSegment, {
+                        flex: item.totalInvested / totalInvested,
+                        backgroundColor: CHART_COLORS[i % CHART_COLORS.length],
+                      }]}
+                    />
+                  ))}
+                </View>
+                <View style={styles.chartLegend}>
+                  {summary.map((item, i) => (
+                    <View key={item.coin} style={styles.legendItem}>
+                      <View style={[styles.legendDot, { backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }]} />
+                      <Text style={styles.legendText}>{item.coin}</Text>
+                      <Text style={styles.legendPct}>{((item.totalInvested / totalInvested) * 100).toFixed(1)}%</Text>
+                    </View>
+                  ))}
+                </View>
+              </>
+            ) : (
+              <Text style={styles.chartEmpty}>Nenhuma compra registrada</Text>
+            )}
+          </View>
+
+          {/* Preço médio vs atual */}
+          <View style={styles.chartCard}>
+            <Text style={styles.chartTitle}>📊 Preço Médio vs Preço Atual</Text>
+            <Text style={styles.chartSubtitle}>Lucro/prejuízo não realizado por moeda</Text>
+            {summary.length > 0 ? (
+              summary.map((item, i) => {
+                const current = currentPrices[item.coin.toUpperCase()];
+                const pct = current != null ? ((current - item.averagePrice) / item.averagePrice * 100) : null;
+                const isGain = pct != null && pct >= 0;
+                return (
+                  <View key={item.coin} style={styles.perfRow}>
+                    <View style={styles.perfHeader}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <View style={[styles.legendDot, { backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }]} />
+                        <Text style={styles.perfCoin}>{item.coin}</Text>
+                      </View>
+                      {pct != null ? (
+                        <Text style={[styles.perfPct, isGain ? styles.perfGain : styles.perfLoss]}>
+                          {isGain ? '+' : ''}{pct.toFixed(1)}%
+                        </Text>
+                      ) : (
+                        <Text style={styles.perfNoData}>sem cotação</Text>
+                      )}
+                    </View>
+                    <View style={styles.perfPriceRow}>
+                      <Text style={styles.perfPriceLabel}>Médio: <Text style={styles.perfPriceVal}>{hideValues ? '***' : formatCurrency(item.averagePrice)}</Text></Text>
+                      {current != null && (
+                        <Text style={styles.perfPriceLabel}>Atual: <Text style={[styles.perfPriceVal, isGain ? styles.perfGain : styles.perfLoss]}>{hideValues ? '***' : formatCurrency(current)}</Text></Text>
+                      )}
+                    </View>
+                    {pct != null && (
+                      <View style={styles.perfBarTrack}>
+                        <View style={[styles.perfBarFill, {
+                          width: `${Math.min(Math.max(Math.abs(pct) / 100 * 100, 3), 100)}%`,
+                          backgroundColor: isGain ? '#34C759' : '#FF3B30',
+                        }]} />
+                      </View>
+                    )}
+                  </View>
+                );
+              })
+            ) : (
+              <Text style={styles.chartEmpty}>Nenhuma compra registrada</Text>
+            )}
+          </View>
+
+          {/* Evolução acumulada */}
+          <View style={styles.chartCard}>
+            <Text style={styles.chartTitle}>📈 Evolução do Investido</Text>
+            <Text style={styles.chartSubtitle}>Total acumulado por mês (USD)</Text>
+            {cumChartData.length > 0 ? (() => {
+              const maxVal = Math.max(...cumChartData.map(d => d.val));
+              const BAR_H = 100;
+              return (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={[styles.barChart, { height: BAR_H + 60 }]}>
+                    {cumChartData.map(({ key, val }) => {
+                      const [y, m] = key.split('-');
+                      return (
+                        <View key={key} style={[styles.barItem, { height: BAR_H + 60 }]}>
+                          <Text style={styles.barTopLabel}>
+                            {hideValues ? '...' : val >= 1000 ? `$${(val / 1000).toFixed(1)}k` : formatCurrency(val)}
+                          </Text>
+                          <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+                            <View style={[styles.barFill, { height: (val / maxVal) * BAR_H, backgroundColor: '#667eea' }]} />
+                          </View>
+                          <Text style={styles.barBottomLabel}>{m}/{y.substring(2)}</Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+              );
+            })() : (
+              <Text style={styles.chartEmpty}>Nenhuma compra registrada</Text>
+            )}
+          </View>
+
+          {/* Resultado mensal */}
+          <View style={styles.chartCard}>
+            <Text style={styles.chartTitle}>📅 Resultado Mensal Realizado</Text>
+            <Text style={styles.chartSubtitle}>Lucro/prejuízo por mês (USD)</Text>
+            {profitData.length > 0 ? (() => {
+              const maxAbs = Math.max(...profitData.map(([, v]) => Math.abs(v)));
+              const BAR_H = 90;
+              return (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={[styles.barChart, { height: BAR_H + 60 }]}>
+                    {profitData.map(([key, val]) => {
+                      const [y, m] = key.split('-');
+                      const isPos = val >= 0;
+                      return (
+                        <View key={key} style={[styles.barItem, { height: BAR_H + 60 }]}>
+                          <Text style={[styles.barTopLabel, { color: isPos ? '#34C759' : '#FF3B30' }]}>
+                            {hideValues ? '...' : `${isPos ? '+' : '-'}$${(Math.abs(val) / 1000).toFixed(1)}k`}
+                          </Text>
+                          <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+                            <View style={[styles.barFill, { height: (Math.abs(val) / maxAbs) * BAR_H, backgroundColor: isPos ? '#34C759' : '#FF3B30' }]} />
+                          </View>
+                          <Text style={styles.barBottomLabel}>{m}/{y.substring(2)}</Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+              );
+            })() : (
+              <Text style={styles.chartEmpty}>Nenhuma venda registrada</Text>
+            )}
+          </View>
+
+        </ScrollView>
+        {renderTabBar()}
+      </SafeAreaView>
+    );
+  }
+
   if (screen === 'taxes') {
     const taxData = calculateTaxReport();
     const currentDate = new Date();
@@ -5104,9 +5329,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderTopWidth: 1,
     borderTopColor: '#F1F3F6',
-    paddingTop: 8,
+    paddingTop: 6,
     paddingBottom: 32,
-    paddingHorizontal: 6,
+    paddingHorizontal: 2,
     elevation: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
@@ -5115,27 +5340,27 @@ const styles = StyleSheet.create({
   },
   tab: {
     flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 2,
     alignItems: 'center',
-    borderRadius: 14,
-    marginHorizontal: 2,
+    borderRadius: 12,
+    marginHorizontal: 1,
   },
   tabActive: {
     backgroundColor: '#EEF1FD',
   },
   tabIcon: {
-    fontSize: 22,
-    marginBottom: 4,
+    fontSize: 20,
+    marginBottom: 2,
   },
   tabText: {
-    fontSize: 10,
+    fontSize: 9,
     color: '#8E8E93',
     textAlign: 'center',
     fontWeight: '500',
   },
   tabTextActive: {
-    fontSize: 10,
+    fontSize: 9,
     color: '#667eea',
     fontWeight: '700',
     textAlign: 'center',
@@ -6949,6 +7174,155 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#8E8E93',
     fontWeight: '500',
+  },
+  chartCard: {
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 18,
+    marginBottom: 18,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    borderWidth: 1,
+    borderColor: '#F1F3F6',
+  },
+  chartTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1C1C1E',
+    marginBottom: 4,
+  },
+  chartSubtitle: {
+    fontSize: 12,
+    color: '#8E8E93',
+    marginBottom: 14,
+  },
+  chartEmpty: {
+    color: '#8E8E93',
+    textAlign: 'center',
+    paddingVertical: 20,
+    fontStyle: 'italic',
+  },
+  stackedBar: {
+    flexDirection: 'row',
+    height: 20,
+    borderRadius: 10,
+    overflow: 'hidden',
+    marginBottom: 14,
+    marginTop: 10,
+  },
+  stackedBarSegment: {
+    height: '100%',
+  },
+  chartLegend: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginBottom: 4,
+  },
+  legendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  legendText: {
+    fontSize: 13,
+    color: '#3C3C43',
+    fontWeight: '600',
+  },
+  legendPct: {
+    fontSize: 12,
+    color: '#8E8E93',
+  },
+  perfRow: {
+    marginBottom: 14,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F3F6',
+  },
+  perfHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  perfCoin: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1C1C1E',
+  },
+  perfPriceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  perfPriceLabel: {
+    fontSize: 12,
+    color: '#8E8E93',
+  },
+  perfPriceVal: {
+    fontWeight: '600',
+    color: '#1C1C1E',
+  },
+  perfBarTrack: {
+    height: 8,
+    backgroundColor: '#F1F3F6',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  perfBarFill: {
+    height: 8,
+    borderRadius: 4,
+  },
+  perfPct: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  perfGain: {
+    color: '#34C759',
+  },
+  perfLoss: {
+    color: '#FF3B30',
+  },
+  perfNoData: {
+    fontSize: 12,
+    color: '#8E8E93',
+    fontStyle: 'italic',
+  },
+  barChart: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    paddingVertical: 4,
+    gap: 6,
+  },
+  barItem: {
+    width: 50,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  barTopLabel: {
+    fontSize: 9,
+    color: '#8E8E93',
+    textAlign: 'center',
+    marginBottom: 3,
+  },
+  barFill: {
+    width: 32,
+    borderRadius: 4,
+    minHeight: 4,
+  },
+  barBottomLabel: {
+    fontSize: 9,
+    color: '#8E8E93',
+    textAlign: 'center',
+    marginTop: 4,
   },
 });
 
