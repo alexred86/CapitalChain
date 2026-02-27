@@ -2754,178 +2754,306 @@ export default function App() {
 
   // TAXES
   if (screen === 'charts') {
-    const summary = calculateSummary();
-    const totalInvested = summary.reduce((sum, s) => sum + s.totalInvested, 0);
+    const btcPurchases = purchases.filter(p => p.coin.toUpperCase() === 'BTC').sort((a, b) => a.date.localeCompare(b.date));
+    const btcPrice = currentPrices['BTC'] ?? null;
 
-    const cumChartData = (() => {
-      const map = new Map<string, number>();
-      purchases.forEach(p => {
+    const totalBTC = btcPurchases.reduce((s, p) => s + p.quantity, 0);
+    const totalInvestedBTC = btcPurchases.reduce((s, p) => s + p.pricePaid, 0);
+    const avgPrice = totalBTC > 0 ? totalInvestedBTC / totalBTC : 0;
+    const currentValue = btcPrice != null ? totalBTC * btcPrice : null;
+    const unrealizedPnL = currentValue != null ? currentValue - totalInvestedBTC : null;
+    const unrealizedPct = avgPrice > 0 && btcPrice != null ? ((btcPrice - avgPrice) / avgPrice * 100) : null;
+    const totalValueBRL = currentValue != null && currentDollarRate != null ? currentValue * currentDollarRate : null;
+
+    // Dados mensais de BTC
+    const monthlyData = (() => {
+      const map = new Map<string, { usd: number; btc: number }>();
+      btcPurchases.forEach(p => {
         const key = p.date.substring(0, 7);
-        map.set(key, (map.get(key) || 0) + p.pricePaid);
+        const prev = map.get(key) || { usd: 0, btc: 0 };
+        map.set(key, { usd: prev.usd + p.pricePaid, btc: prev.btc + p.quantity });
       });
-      let cum = 0;
+      let cumBTC = 0; let cumUSD = 0;
       return Array.from(map.entries())
         .sort((a, b) => a[0].localeCompare(b[0]))
-        .map(([key, val]) => { cum += val; return { key, val: cum }; });
+        .map(([key, val]) => {
+          cumBTC += val.btc; cumUSD += val.usd;
+          return { key, usd: val.usd, btc: val.btc, cumBTC, cumUSD, avgPrice: cumUSD / cumBTC };
+        });
     })();
 
-    const profitData = (() => {
-      const map = new Map<string, number>();
-      sales.forEach(s => {
-        const key = s.date.substring(0, 7);
-        map.set(key, (map.get(key) || 0) + s.profit);
-      });
-      return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-    })();
+    // Compras individuais para o gráfico DCA
+    const dcaItems = btcPurchases.slice(-20); // últimas 20 compras
+    const dcaMaxPrice = btcPrice != null
+      ? Math.max(...dcaItems.map(p => p.pricePerUnit), btcPrice)
+      : Math.max(...dcaItems.map(p => p.pricePerUnit), 0);
+
+    const isGain = unrealizedPct != null && unrealizedPct >= 0;
+    const BAR_H = 110;
 
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>📊 Gráficos</Text>
+        <View style={styles.btcChartsHeader}>
+          <Text style={styles.btcChartsHeaderTitle}>₿ Bitcoin</Text>
+          {btcPrice != null && (
+            <Text style={styles.btcChartsHeaderPrice}>{formatCurrency(btcPrice)}</Text>
+          )}
         </View>
+
         <ScrollView style={styles.content}>
 
-          {/* Distribuição do portfólio */}
-          <View style={styles.chartCard}>
-            <Text style={styles.chartTitle}>🥧 Distribuição do Portfólio</Text>
-            {summary.length > 0 && totalInvested > 0 ? (
-              <>
-                <View style={styles.stackedBar}>
-                  {summary.map((item, i) => (
-                    <View
-                      key={item.coin}
-                      style={[styles.stackedBarSegment, {
-                        flex: item.totalInvested / totalInvested,
-                        backgroundColor: CHART_COLORS[i % CHART_COLORS.length],
-                      }]}
-                    />
-                  ))}
+          {btcPurchases.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={{ fontSize: 48 }}>₿</Text>
+              <Text style={styles.emptyText}>Nenhuma compra de BTC</Text>
+              <Text style={styles.emptySubtext}>Adicione suas compras de Bitcoin para ver os gráficos</Text>
+            </View>
+          ) : (
+            <>
+              {/* Card resumo */}
+              <View style={styles.btcSummaryCard}>
+                <View style={styles.btcSummaryRow}>
+                  <View style={styles.btcSummaryItem}>
+                    <Text style={styles.btcSummaryLabel}>Total BTC</Text>
+                    <Text style={styles.btcSummaryValue}>{hideValues ? '****' : totalBTC.toFixed(8)}</Text>
+                  </View>
+                  <View style={styles.btcSummaryItem}>
+                    <Text style={styles.btcSummaryLabel}>Preço Médio DCA</Text>
+                    <Text style={styles.btcSummaryValue}>{hideValues ? '****' : formatCurrency(avgPrice)}</Text>
+                  </View>
                 </View>
-                <View style={styles.chartLegend}>
-                  {summary.map((item, i) => (
-                    <View key={item.coin} style={styles.legendItem}>
-                      <View style={[styles.legendDot, { backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }]} />
-                      <Text style={styles.legendText}>{item.coin}</Text>
-                      <Text style={styles.legendPct}>{((item.totalInvested / totalInvested) * 100).toFixed(1)}%</Text>
-                    </View>
-                  ))}
+                <View style={styles.btcSummaryRow}>
+                  <View style={styles.btcSummaryItem}>
+                    <Text style={styles.btcSummaryLabel}>Total Investido</Text>
+                    <Text style={styles.btcSummaryValue}>{hideValues ? '****' : formatCurrency(totalInvestedBTC)}</Text>
+                  </View>
+                  <View style={styles.btcSummaryItem}>
+                    <Text style={styles.btcSummaryLabel}>Valor Atual</Text>
+                    <Text style={[styles.btcSummaryValue, { color: '#F7931A' }]}>
+                      {hideValues ? '****' : currentValue != null ? formatCurrency(currentValue) : '—'}
+                    </Text>
+                  </View>
                 </View>
-              </>
-            ) : (
-              <Text style={styles.chartEmpty}>Nenhuma compra registrada</Text>
-            )}
-          </View>
-
-          {/* Preço médio vs atual */}
-          <View style={styles.chartCard}>
-            <Text style={styles.chartTitle}>📊 Preço Médio vs Preço Atual</Text>
-            <Text style={styles.chartSubtitle}>Lucro/prejuízo não realizado por moeda</Text>
-            {summary.length > 0 ? (
-              summary.map((item, i) => {
-                const current = currentPrices[item.coin.toUpperCase()];
-                const pct = current != null ? ((current - item.averagePrice) / item.averagePrice * 100) : null;
-                const isGain = pct != null && pct >= 0;
-                return (
-                  <View key={item.coin} style={styles.perfRow}>
-                    <View style={styles.perfHeader}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <View style={[styles.legendDot, { backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }]} />
-                        <Text style={styles.perfCoin}>{item.coin}</Text>
-                      </View>
-                      {pct != null ? (
-                        <Text style={[styles.perfPct, isGain ? styles.perfGain : styles.perfLoss]}>
-                          {isGain ? '+' : ''}{pct.toFixed(1)}%
-                        </Text>
-                      ) : (
-                        <Text style={styles.perfNoData}>sem cotação</Text>
-                      )}
+                {unrealizedPnL != null && (
+                  <View style={[styles.btcPnLBanner, isGain ? styles.btcPnLGain : styles.btcPnLLoss]}>
+                    <Text style={styles.btcPnLLabel}>{isGain ? '📈 Lucro Não Realizado' : '📉 Prejuízo Não Realizado'}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                      <Text style={styles.btcPnLValue}>
+                        {hideValues ? '****' : `${isGain ? '+' : ''}${formatCurrency(unrealizedPnL)}`}
+                      </Text>
+                      <Text style={styles.btcPnLPct}>
+                        {unrealizedPct != null ? `${isGain ? '+' : ''}${unrealizedPct.toFixed(1)}%` : ''}
+                      </Text>
                     </View>
-                    <View style={styles.perfPriceRow}>
-                      <Text style={styles.perfPriceLabel}>Médio: <Text style={styles.perfPriceVal}>{hideValues ? '***' : formatCurrency(item.averagePrice)}</Text></Text>
-                      {current != null && (
-                        <Text style={styles.perfPriceLabel}>Atual: <Text style={[styles.perfPriceVal, isGain ? styles.perfGain : styles.perfLoss]}>{hideValues ? '***' : formatCurrency(current)}</Text></Text>
-                      )}
-                    </View>
-                    {pct != null && (
-                      <View style={styles.perfBarTrack}>
-                        <View style={[styles.perfBarFill, {
-                          width: `${Math.min(Math.max(Math.abs(pct) / 100 * 100, 3), 100)}%`,
-                          backgroundColor: isGain ? '#34C759' : '#FF3B30',
-                        }]} />
-                      </View>
+                    {totalValueBRL != null && (
+                      <Text style={styles.btcPnLBrl}>
+                        {hideValues ? '****' : `≈ ${formatCurrencyBRL(totalValueBRL)} (carteira total)`}
+                      </Text>
                     )}
                   </View>
-                );
-              })
-            ) : (
-              <Text style={styles.chartEmpty}>Nenhuma compra registrada</Text>
-            )}
-          </View>
+                )}
+              </View>
 
-          {/* Evolução acumulada */}
-          <View style={styles.chartCard}>
-            <Text style={styles.chartTitle}>📈 Evolução do Investido</Text>
-            <Text style={styles.chartSubtitle}>Total acumulado por mês (USD)</Text>
-            {cumChartData.length > 0 ? (() => {
-              const maxVal = Math.max(...cumChartData.map(d => d.val));
-              const BAR_H = 100;
-              return (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View style={[styles.barChart, { height: BAR_H + 60 }]}>
-                    {cumChartData.map(({ key, val }) => {
-                      const [y, m] = key.split('-');
-                      return (
-                        <View key={key} style={[styles.barItem, { height: BAR_H + 60 }]}>
-                          <Text style={styles.barTopLabel}>
-                            {hideValues ? '...' : val >= 1000 ? `$${(val / 1000).toFixed(1)}k` : formatCurrency(val)}
-                          </Text>
-                          <View style={{ flex: 1, justifyContent: 'flex-end' }}>
-                            <View style={[styles.barFill, { height: (val / maxVal) * BAR_H, backgroundColor: '#667eea' }]} />
-                          </View>
-                          <Text style={styles.barBottomLabel}>{m}/{y.substring(2)}</Text>
-                        </View>
-                      );
-                    })}
+              {/* Preço médio DCA vs atual */}
+              <View style={styles.chartCard}>
+                <Text style={styles.chartTitle}>📊 DCA vs Preço Atual</Text>
+                <Text style={styles.chartSubtitle}>Seu preço médio comparado ao mercado</Text>
+                {btcPrice != null ? (
+                  <View style={styles.dcaCompareContainer}>
+                    {/* Barra DCA */}
+                    <View style={styles.dcaBarRow}>
+                      <Text style={styles.dcaBarLabel}>Seu DCA</Text>
+                      <View style={styles.dcaBarTrack}>
+                        <View style={[styles.dcaBarFill, {
+                          width: `${Math.round((avgPrice / Math.max(avgPrice, btcPrice)) * 100)}%`,
+                          backgroundColor: '#667eea',
+                        }]} />
+                      </View>
+                      <Text style={styles.dcaBarValue}>{hideValues ? '****' : formatCurrency(avgPrice)}</Text>
+                    </View>
+                    {/* Barra preço atual */}
+                    <View style={styles.dcaBarRow}>
+                      <Text style={styles.dcaBarLabel}>Atual</Text>
+                      <View style={styles.dcaBarTrack}>
+                        <View style={[styles.dcaBarFill, {
+                          width: `${Math.round((btcPrice / Math.max(avgPrice, btcPrice)) * 100)}%`,
+                          backgroundColor: '#F7931A',
+                        }]} />
+                      </View>
+                      <Text style={[styles.dcaBarValue, { color: '#F7931A' }]}>{formatCurrency(btcPrice)}</Text>
+                    </View>
+                    <View style={[styles.dcaGapBadge, isGain ? { backgroundColor: 'rgba(52,199,89,0.12)' } : { backgroundColor: 'rgba(255,59,48,0.12)' }]}>
+                      <Text style={[styles.dcaGapText, { color: isGain ? '#34C759' : '#FF3B30' }]}>
+                        {isGain ? '✅ Comprando abaixo do mercado em ' : '⚠️ Mercado abaixo do seu DCA em '}
+                        <Text style={{ fontWeight: '800' }}>{Math.abs(unrealizedPct ?? 0).toFixed(1)}%</Text>
+                      </Text>
+                    </View>
                   </View>
-                </ScrollView>
-              );
-            })() : (
-              <Text style={styles.chartEmpty}>Nenhuma compra registrada</Text>
-            )}
-          </View>
+                ) : (
+                  <Text style={styles.chartEmpty}>Cotação BTC não disponível</Text>
+                )}
+              </View>
 
-          {/* Resultado mensal */}
-          <View style={styles.chartCard}>
-            <Text style={styles.chartTitle}>📅 Resultado Mensal Realizado</Text>
-            <Text style={styles.chartSubtitle}>Lucro/prejuízo por mês (USD)</Text>
-            {profitData.length > 0 ? (() => {
-              const maxAbs = Math.max(...profitData.map(([, v]) => Math.abs(v)));
-              const BAR_H = 90;
-              return (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View style={[styles.barChart, { height: BAR_H + 60 }]}>
-                    {profitData.map(([key, val]) => {
-                      const [y, m] = key.split('-');
-                      const isPos = val >= 0;
-                      return (
-                        <View key={key} style={[styles.barItem, { height: BAR_H + 60 }]}>
-                          <Text style={[styles.barTopLabel, { color: isPos ? '#34C759' : '#FF3B30' }]}>
-                            {hideValues ? '...' : `${isPos ? '+' : '-'}$${(Math.abs(val) / 1000).toFixed(1)}k`}
-                          </Text>
-                          <View style={{ flex: 1, justifyContent: 'flex-end' }}>
-                            <View style={[styles.barFill, { height: (Math.abs(val) / maxAbs) * BAR_H, backgroundColor: isPos ? '#34C759' : '#FF3B30' }]} />
+              {/* Acumulação de sats */}
+              {monthlyData.length > 0 && (
+                <View style={styles.chartCard}>
+                  <Text style={styles.chartTitle}>₿ Acumulação de Sats por Mês</Text>
+                  <Text style={styles.chartSubtitle}>BTC acumulado ao longo do tempo</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    <View style={[styles.barChart, { height: BAR_H + 56 }]}>
+                      {monthlyData.map(({ key, cumBTC }) => {
+                        const maxBTC = monthlyData[monthlyData.length - 1].cumBTC;
+                        const [y, m] = key.split('-');
+                        return (
+                          <View key={key} style={[styles.barItem, { height: BAR_H + 56, width: 56 }]}>
+                            <Text style={styles.barTopLabel}>
+                              {hideValues ? '...' : cumBTC >= 1 ? `${cumBTC.toFixed(3)}` : `${(cumBTC * 1000).toFixed(1)}m`}
+                            </Text>
+                            <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+                              <View style={[styles.barFill, {
+                                height: (cumBTC / maxBTC) * BAR_H,
+                                backgroundColor: '#F7931A',
+                                borderTopLeftRadius: 6,
+                                borderTopRightRadius: 6,
+                              }]} />
+                            </View>
+                            <Text style={styles.barBottomLabel}>{m}/{y.substring(2)}</Text>
                           </View>
-                          <Text style={styles.barBottomLabel}>{m}/{y.substring(2)}</Text>
-                        </View>
-                      );
-                    })}
+                        );
+                      })}
+                    </View>
+                  </ScrollView>
+                </View>
+              )}
+
+              {/* USD investido por mês + preço médio corrente */}
+              {monthlyData.length > 0 && (
+                <View style={styles.chartCard}>
+                  <Text style={styles.chartTitle}>📈 USD Investido por Mês</Text>
+                  <Text style={styles.chartSubtitle}>Quanto você aportou e seu DCA acumulado</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    <View style={[styles.barChart, { height: BAR_H + 56 }]}>
+                      {(() => {
+                        const maxUSD = Math.max(...monthlyData.map(d => d.usd));
+                        return monthlyData.map(({ key, usd, avgPrice: runAvg }) => {
+                          const [y, m] = key.split('-');
+                          return (
+                            <View key={key} style={[styles.barItem, { height: BAR_H + 56, width: 60 }]}>
+                              <Text style={[styles.barTopLabel, { color: '#667eea' }]}>
+                                {hideValues ? '...' : usd >= 1000 ? `$${(usd / 1000).toFixed(1)}k` : `$${usd.toFixed(0)}`}
+                              </Text>
+                              <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+                                <View style={[styles.barFill, {
+                                  height: (usd / maxUSD) * BAR_H,
+                                  backgroundColor: '#667eea',
+                                  borderTopLeftRadius: 6,
+                                  borderTopRightRadius: 6,
+                                }]} />
+                              </View>
+                              <Text style={[styles.barBottomLabel, { color: '#F7931A', fontWeight: '600' }]}>
+                                {hideValues ? '...' : runAvg >= 1000 ? `$${(runAvg / 1000).toFixed(0)}k` : `$${runAvg.toFixed(0)}`}
+                              </Text>
+                              <Text style={styles.barBottomLabel}>{m}/{y.substring(2)}</Text>
+                            </View>
+                          );
+                        });
+                      })()}
+                    </View>
+                  </ScrollView>
+                  <View style={styles.chartLegend}>
+                    <View style={styles.legendItem}>
+                      <View style={[styles.legendDot, { backgroundColor: '#667eea' }]} />
+                      <Text style={styles.legendText}>USD aportado</Text>
+                    </View>
+                    <View style={styles.legendItem}>
+                      <View style={[styles.legendDot, { backgroundColor: '#F7931A' }]} />
+                      <Text style={styles.legendText}>DCA acumulado</Text>
+                    </View>
                   </View>
-                </ScrollView>
-              );
-            })() : (
-              <Text style={styles.chartEmpty}>Nenhuma venda registrada</Text>
-            )}
-          </View>
+                </View>
+              )}
+
+              {/* DCA de cada compra */}
+              {dcaItems.length > 0 && (
+                <View style={styles.chartCard}>
+                  <Text style={styles.chartTitle}>🎯 Histórico de Compras DCA</Text>
+                  <Text style={styles.chartSubtitle}>
+                    Preço de cada compra vs preço atual{btcPurchases.length > 20 ? ` (últimas ${dcaItems.length})` : ''}
+                  </Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    <View style={[styles.barChart, { height: BAR_H + 56 }]}>
+                      {dcaItems.map((p, i) => {
+                        const h = (p.pricePerUnit / dcaMaxPrice) * BAR_H;
+                        const aboveAvg = btcPrice != null && p.pricePerUnit < btcPrice;
+                        const [, m, d] = p.date.substring(0, 10).split('-');
+                        return (
+                          <View key={p.id} style={[styles.barItem, { height: BAR_H + 56, width: 52 }]}>
+                            <View style={{ flex: 1, justifyContent: 'flex-end', position: 'relative' }}>
+                              <View style={[styles.barFill, {
+                                height: h,
+                                backgroundColor: aboveAvg ? '#34C759' : '#FF3B30',
+                                borderTopLeftRadius: 5,
+                                borderTopRightRadius: 5,
+                              }]} />
+                            </View>
+                            <Text style={styles.barBottomLabel}>{d}/{m}</Text>
+                            <Text style={[styles.barBottomLabel, { fontSize: 8 }]}>
+                              {hideValues ? '...' : p.pricePerUnit >= 1000 ? `$${(p.pricePerUnit / 1000).toFixed(0)}k` : `$${p.pricePerUnit.toFixed(0)}`}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                      {btcPrice != null && (
+                        <View style={{ position: 'absolute', top: BAR_H - (btcPrice / dcaMaxPrice) * BAR_H, left: 0, right: 0, height: 1.5, backgroundColor: '#F7931A', opacity: 0.7 }} />
+                      )}
+                    </View>
+                  </ScrollView>
+                  <View style={styles.chartLegend}>
+                    <View style={styles.legendItem}>
+                      <View style={[styles.legendDot, { backgroundColor: '#34C759' }]} />
+                      <Text style={styles.legendText}>Compra abaixo do preço atual</Text>
+                    </View>
+                    <View style={styles.legendItem}>
+                      <View style={[styles.legendDot, { backgroundColor: '#FF3B30' }]} />
+                      <Text style={styles.legendText}>Compra acima do preço atual</Text>
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              {/* Número de compras e aporte médio */}
+              <View style={styles.chartCard}>
+                <Text style={styles.chartTitle}>📋 Estatísticas do DCA</Text>
+                <View style={styles.statsGrid}>
+                  <View style={styles.statsItem}>
+                    <Text style={styles.statsLabel}>Nº de compras</Text>
+                    <Text style={styles.statsValue}>{btcPurchases.length}</Text>
+                  </View>
+                  <View style={styles.statsItem}>
+                    <Text style={styles.statsLabel}>Aporte médio</Text>
+                    <Text style={styles.statsValue}>{hideValues ? '****' : formatCurrency(totalInvestedBTC / btcPurchases.length)}</Text>
+                  </View>
+                  <View style={styles.statsItem}>
+                    <Text style={styles.statsLabel}>Menor preço pago</Text>
+                    <Text style={styles.statsValue}>{hideValues ? '****' : formatCurrency(Math.min(...btcPurchases.map(p => p.pricePerUnit)))}</Text>
+                  </View>
+                  <View style={styles.statsItem}>
+                    <Text style={styles.statsLabel}>Maior preço pago</Text>
+                    <Text style={styles.statsValue}>{hideValues ? '****' : formatCurrency(Math.max(...btcPurchases.map(p => p.pricePerUnit)))}</Text>
+                  </View>
+                  <View style={styles.statsItem}>
+                    <Text style={styles.statsLabel}>1ª compra</Text>
+                    <Text style={styles.statsValue}>{formatDate(btcPurchases[0].date)}</Text>
+                  </View>
+                  <View style={styles.statsItem}>
+                    <Text style={styles.statsLabel}>Última compra</Text>
+                    <Text style={styles.statsValue}>{formatDate(btcPurchases[btcPurchases.length - 1].date)}</Text>
+                  </View>
+                </View>
+              </View>
+
+            </>
+          )}
 
         </ScrollView>
         {renderTabBar()}
@@ -7174,6 +7302,168 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#8E8E93',
     fontWeight: '500',
+  },
+  btcChartsHeader: {
+    backgroundColor: '#F7931A',
+    paddingTop: 16,
+    paddingBottom: 16,
+    paddingHorizontal: 22,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    shadowColor: '#F7931A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  btcChartsHeaderTitle: {
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  btcChartsHeaderPrice: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  btcSummaryCard: {
+    backgroundColor: '#1C1C1E',
+    borderRadius: 18,
+    padding: 18,
+    marginBottom: 18,
+  },
+  btcSummaryRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
+  },
+  btcSummaryItem: {
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 12,
+    padding: 12,
+  },
+  btcSummaryLabel: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginBottom: 4,
+  },
+  btcSummaryValue: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  btcPnLBanner: {
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 4,
+  },
+  btcPnLGain: {
+    backgroundColor: 'rgba(52,199,89,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(52,199,89,0.3)',
+  },
+  btcPnLLoss: {
+    backgroundColor: 'rgba(255,59,48,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,59,48,0.3)',
+  },
+  btcPnLLabel: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  btcPnLValue: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  btcPnLPct: {
+    color: '#34C759',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  btcPnLBrl: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 12,
+    marginTop: 6,
+  },
+  dcaCompareContainer: {
+    marginTop: 8,
+  },
+  dcaBarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 8,
+  },
+  dcaBarLabel: {
+    width: 52,
+    fontSize: 12,
+    color: '#8E8E93',
+    fontWeight: '600',
+  },
+  dcaBarTrack: {
+    flex: 1,
+    height: 14,
+    backgroundColor: '#F1F3F6',
+    borderRadius: 7,
+    overflow: 'hidden',
+  },
+  dcaBarFill: {
+    height: 14,
+    borderRadius: 7,
+  },
+  dcaBarValue: {
+    width: 80,
+    fontSize: 12,
+    color: '#1C1C1E',
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  dcaGapBadge: {
+    borderRadius: 10,
+    padding: 12,
+    alignItems: 'center',
+  },
+  dcaGapText: {
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 8,
+  },
+  statsItem: {
+    flex: 1,
+    minWidth: '45%',
+    backgroundColor: '#F8F9FD',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#F1F3F6',
+  },
+  statsLabel: {
+    fontSize: 11,
+    color: '#8E8E93',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+    marginBottom: 4,
+  },
+  statsValue: {
+    fontSize: 14,
+    color: '#1C1C1E',
+    fontWeight: '700',
   },
   chartCard: {
     backgroundColor: '#fff',
