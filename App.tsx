@@ -2661,63 +2661,6 @@ export default function App() {
   }
 
   // TAXES
-  if (screen === 'more') {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>⚙️ Mais</Text>
-        </View>
-        <ScrollView style={styles.content}>
-          <TouchableOpacity
-            style={styles.moreCard}
-            onPress={() => setScreen('taxes')}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.moreCardIcon}>💼</Text>
-            <View style={styles.moreCardText}>
-              <Text style={styles.moreCardTitle}>Impostos</Text>
-              <Text style={styles.moreCardDesc}>Declaração IR, Bens e Direitos, GCAP</Text>
-            </View>
-            <Text style={styles.moreCardChevron}>›</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.moreCard}
-            onPress={() => setShowTaxCalculator(true)}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.moreCardIcon}>🧮</Text>
-            <View style={styles.moreCardText}>
-              <Text style={styles.moreCardTitle}>Calculadora de Imposto</Text>
-              <Text style={styles.moreCardDesc}>Simule o imposto antes de vender</Text>
-            </View>
-            <Text style={styles.moreCardChevron}>›</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.moreCard}
-            onPress={openBackupMenu}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.moreCardIcon}>💾</Text>
-            <View style={styles.moreCardText}>
-              <Text style={styles.moreCardTitle}>Backup / Restaurar</Text>
-              <Text style={styles.moreCardDesc}>Salve ou recupere todos os seus dados</Text>
-            </View>
-            <Text style={styles.moreCardChevron}>›</Text>
-          </TouchableOpacity>
-
-          <View style={styles.homeFooter}>
-            <Text style={styles.footerText}>
-              ⚡ Desenvolvido por <Text style={styles.footerName}>@Alexred</Text>
-            </Text>
-          </View>
-        </ScrollView>
-        {renderTabBar()}
-      </SafeAreaView>
-    );
-  }
-
   if (screen === 'taxes') {
     const taxData = calculateTaxReport();
     const currentDate = new Date();
@@ -3896,17 +3839,56 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Histórico</Text>
-        <Text style={styles.subtitle}>
-          {transactionType === 'purchases' ? `${filteredPurchases.length} de ${purchases.length} compra(s)` :
-           transactionType === 'sales' ? `${filteredSales.length} de ${sales.length} venda(s)` :
-           `${filteredPurchases.length} compra(s) | ${filteredSales.length} venda(s)`}
-        </Text>
-      </View>
+      {screen === 'more' ? (
+        <>
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>⚙️ Mais</Text>
+          </View>
+          <ScrollView style={styles.content}>
+            <TouchableOpacity style={styles.moreCard} onPress={() => setScreen('taxes')} activeOpacity={0.85}>
+              <Text style={styles.moreCardIcon}>💼</Text>
+              <View style={styles.moreCardText}>
+                <Text style={styles.moreCardTitle}>Impostos</Text>
+                <Text style={styles.moreCardDesc}>Declaração IR, Bens e Direitos, GCAP</Text>
+              </View>
+              <Text style={styles.moreCardChevron}>›</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.moreCard} onPress={() => setShowTaxCalculator(true)} activeOpacity={0.85}>
+              <Text style={styles.moreCardIcon}>🧮</Text>
+              <View style={styles.moreCardText}>
+                <Text style={styles.moreCardTitle}>Calculadora de Imposto</Text>
+                <Text style={styles.moreCardDesc}>Simule o imposto antes de vender</Text>
+              </View>
+              <Text style={styles.moreCardChevron}>›</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.moreCard} onPress={openBackupMenu} activeOpacity={0.85}>
+              <Text style={styles.moreCardIcon}>💾</Text>
+              <View style={styles.moreCardText}>
+                <Text style={styles.moreCardTitle}>Backup / Restaurar</Text>
+                <Text style={styles.moreCardDesc}>Salve ou recupere todos os seus dados</Text>
+              </View>
+              <Text style={styles.moreCardChevron}>›</Text>
+            </TouchableOpacity>
+            <View style={styles.homeFooter}>
+              <Text style={styles.footerText}>
+                ⚡ Desenvolvido por <Text style={styles.footerName}>@Alexred</Text>
+              </Text>
+            </View>
+          </ScrollView>
+        </>
+      ) : (
+        <>
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>Histórico</Text>
+            <Text style={styles.subtitle}>
+              {transactionType === 'purchases' ? `${filteredPurchases.length} de ${purchases.length} compra(s)` :
+               transactionType === 'sales' ? `${filteredSales.length} de ${sales.length} venda(s)` :
+               `${filteredPurchases.length} compra(s) | ${filteredSales.length} venda(s)`}
+            </Text>
+          </View>
 
-      {/* Filtros */}
-      <View style={styles.filterContainer}>
+          {/* Filtros */}
+          <View style={styles.filterContainer}>
         <Text style={styles.filterTitle}>🔍 Filtros</Text>
         
         <View style={styles.filterRow}>
@@ -4281,6 +4263,8 @@ export default function App() {
         setTempPurchaseDate,
         handlePurchaseDateConfirm,
         () => setShowPurchaseDatePicker(false)
+      )}
+        </>
       )}
 
       {/* Modal de Exportação */}
