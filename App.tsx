@@ -121,7 +121,7 @@ const formatDate = (dateString: string): string => {
 };
 
 export default function App() {
-  const [screen, setScreen] = useState<'home' | 'add' | 'sell' | 'history' | 'taxes'>('home');
+  const [screen, setScreen] = useState<'home' | 'add' | 'sell' | 'history' | 'taxes' | 'more'>('home');
   const [purchases, setPurchases] = useState<CryptoPurchase[]>([]);
   const [sales, setSales] = useState<CryptoSale[]>([]);
   const [taxLosses, setTaxLosses] = useState<{[year: string]: number}>({});
@@ -1900,9 +1900,9 @@ export default function App() {
         <Text style={styles.tabIcon}>📋</Text>
         <Text style={screen === 'history' ? styles.tabTextActive : styles.tabText}>Histórico</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={[styles.tab, screen === 'taxes' && styles.tabActive]} onPress={() => setScreen('taxes')}>
-        <Text style={styles.tabIcon}>💼</Text>
-        <Text style={screen === 'taxes' ? styles.tabTextActive : styles.tabText}>Impostos</Text>
+      <TouchableOpacity style={[styles.tab, (screen === 'more' || screen === 'taxes') && styles.tabActive]} onPress={() => setScreen('more')}>
+        <Text style={styles.tabIcon}>⚙️</Text>
+        <Text style={(screen === 'more' || screen === 'taxes') ? styles.tabTextActive : styles.tabText}>Mais</Text>
       </TouchableOpacity>
     </View>
   );
@@ -2015,10 +2015,6 @@ export default function App() {
               </View>
             ))
           )}
-          
-          <TouchableOpacity style={styles.backupButton} onPress={openBackupMenu}>
-            <Text style={styles.backupButtonText}>💾 Backup/Restaurar Dados</Text>
-          </TouchableOpacity>
           
           <View style={styles.homeFooter}>
             <Text style={styles.footerText}>
@@ -2665,6 +2661,63 @@ export default function App() {
   }
 
   // TAXES
+  if (screen === 'more') {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>⚙️ Mais</Text>
+        </View>
+        <ScrollView style={styles.content}>
+          <TouchableOpacity
+            style={styles.moreCard}
+            onPress={() => setScreen('taxes')}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.moreCardIcon}>💼</Text>
+            <View style={styles.moreCardText}>
+              <Text style={styles.moreCardTitle}>Impostos</Text>
+              <Text style={styles.moreCardDesc}>Declaração IR, Bens e Direitos, GCAP</Text>
+            </View>
+            <Text style={styles.moreCardChevron}>›</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.moreCard}
+            onPress={() => setShowTaxCalculator(true)}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.moreCardIcon}>🧮</Text>
+            <View style={styles.moreCardText}>
+              <Text style={styles.moreCardTitle}>Calculadora de Imposto</Text>
+              <Text style={styles.moreCardDesc}>Simule o imposto antes de vender</Text>
+            </View>
+            <Text style={styles.moreCardChevron}>›</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.moreCard}
+            onPress={openBackupMenu}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.moreCardIcon}>💾</Text>
+            <View style={styles.moreCardText}>
+              <Text style={styles.moreCardTitle}>Backup / Restaurar</Text>
+              <Text style={styles.moreCardDesc}>Salve ou recupere todos os seus dados</Text>
+            </View>
+            <Text style={styles.moreCardChevron}>›</Text>
+          </TouchableOpacity>
+
+          <View style={styles.homeFooter}>
+            <Text style={styles.footerText}>
+              ⚡ Desenvolvido por <Text style={styles.footerName}>@Alexred</Text>
+            </Text>
+          </View>
+        </ScrollView>
+        {renderTabBar()}
+      </SafeAreaView>
+    );
+  }
+
   if (screen === 'taxes') {
     const taxData = calculateTaxReport();
     const currentDate = new Date();
@@ -5395,6 +5448,43 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 17,
     fontWeight: '800',
+  },
+  moreCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1C1C1E',
+    borderRadius: 16,
+    padding: 18,
+    marginHorizontal: 20,
+    marginBottom: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  moreCardIcon: {
+    fontSize: 32,
+    marginRight: 16,
+  },
+  moreCardText: {
+    flex: 1,
+  },
+  moreCardTitle: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '700',
+    marginBottom: 3,
+  },
+  moreCardDesc: {
+    color: '#8E8E93',
+    fontSize: 13,
+  },
+  moreCardChevron: {
+    color: '#636366',
+    fontSize: 26,
+    fontWeight: '300',
+    marginLeft: 8,
   },
   backupButton: {
     backgroundColor: '#FF9500',
