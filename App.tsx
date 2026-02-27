@@ -385,7 +385,10 @@ export default function App() {
       for (let daysBack = 0; daysBack <= 5; daysBack++) {
         const date = new Date();
         date.setDate(date.getDate() - daysBack);
-        const dateStr = date.toISOString().split('T')[0].replace(/-/g, '');
+        const mm = String(date.getMonth() + 1).padStart(2, '0');
+        const dd = String(date.getDate()).padStart(2, '0');
+        const yyyy = date.getFullYear();
+        const dateStr = `${mm}-${dd}-${yyyy}`;
         const response = await fetch(
           `https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoDolarDia(dataCotacao=@dataCotacao)?@dataCotacao='${dateStr}'&$format=json`
         );
