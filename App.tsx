@@ -382,19 +382,22 @@ export default function App() {
   // Buscar cotação atual do dólar (Banco Central)
   const fetchDollarRate = async () => {
     try {
-      const today = new Date();
-      const dateStr = today.toISOString().split('T')[0].replace(/-/g, '');
-      const response = await fetch(
-        `https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoDolarDia(dataCotacao=@dataCotacao)?@dataCotacao='${dateStr}'&$format=json`
-      );
-      const data = await response.json();
-      if (data.value && data.value.length > 0) {
-        const rate = data.value[0].cotacaoVenda;
-        setCurrentDollarRate(rate);
-        setDollarRate(rate.toFixed(2).replace('.', ','));
-        setSellDollarRate(rate.toFixed(2).replace('.', ','));
-        setConvertDollarRate(rate.toFixed(2).replace('.', ','));
-        return rate;
+      for (let daysBack = 0; daysBack <= 5; daysBack++) {
+        const date = new Date();
+        date.setDate(date.getDate() - daysBack);
+        const dateStr = date.toISOString().split('T')[0].replace(/-/g, '');
+        const response = await fetch(
+          `https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoDolarDia(dataCotacao=@dataCotacao)?@dataCotacao='${dateStr}'&$format=json`
+        );
+        const data = await response.json();
+        if (data.value && data.value.length > 0) {
+          const rate = data.value[0].cotacaoVenda;
+          setCurrentDollarRate(rate);
+          setDollarRate(rate.toFixed(2).replace('.', ','));
+          setSellDollarRate(rate.toFixed(2).replace('.', ','));
+          setConvertDollarRate(rate.toFixed(2).replace('.', ','));
+          return rate;
+        }
       }
     } catch (error) {
       console.error('Erro ao buscar cotação:', error);
