@@ -1954,23 +1954,42 @@ export default function App() {
   if (screen === 'home') {
     const summary = calculateSummary();
     const totalInvested = summary.reduce((sum, s) => sum + s.totalInvested, 0);
+    const totalProfit = summary.reduce((sum, s) => sum + s.totalProfit, 0);
+    const totalBRL = currentDollarRate ? totalInvested * currentDollarRate : null;
 
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Text style={styles.headerTitle}>CapitalChain</Text>
-            <View style={styles.totalCard}>
-              <Text style={styles.totalLabel}>Total Investido</Text>
-              <Text style={styles.totalValue}>{hideValues ? '$ ****' : formatCurrency(totalInvested)}</Text>
+        <View style={styles.homeHeader}>
+          <View style={styles.homeHeaderTop}>
+            <Text style={styles.homeHeaderTitle}>⚡ CapitalChain</Text>
+            <TouchableOpacity style={styles.hideButton} onPress={toggleHideValues}>
+              <Text style={styles.hideButtonText}>{hideValues ? '👁' : '👁️'}</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.homeHeaderMetrics}>
+            <View style={styles.homeMetricCard}>
+              <Text style={styles.homeMetricLabel}>Total Investido</Text>
+              <Text style={styles.homeMetricValue}>{hideValues ? '$ ****' : formatCurrency(totalInvested)}</Text>
+            </View>
+            <View style={[styles.homeMetricCard, totalProfit >= 0 ? styles.homeMetricCardProfit : styles.homeMetricCardLoss]}>
+              <Text style={styles.homeMetricLabel}>{totalProfit >= 0 ? 'Lucro Realiz.' : 'Prejuízo Realiz.'}</Text>
+              <Text style={[styles.homeMetricValue, totalProfit >= 0 ? styles.homeMetricProfit : styles.homeMetricLoss]}>
+                {hideValues ? '$ ****' : `${totalProfit >= 0 ? '+' : '-'} ${formatCurrency(Math.abs(totalProfit))}`}
+              </Text>
+            </View>
+            <View style={styles.homeMetricCard}>
+              <Text style={styles.homeMetricLabel}>Equiv. BRL</Text>
+              <Text style={styles.homeMetricValue}>
+                {hideValues ? 'R$ ****' : totalBRL ? formatCurrencyBRL(totalBRL) : 'R$ —'}
+              </Text>
+            </View>
+            <View style={styles.homeMetricCard}>
+              <Text style={styles.homeMetricLabel}>Cotação USD</Text>
+              <Text style={styles.homeMetricValue}>
+                {currentDollarRate ? `R$ ${currentDollarRate.toFixed(2).replace('.', ',')}` : 'R$ —'}
+              </Text>
             </View>
           </View>
-          <TouchableOpacity 
-            style={styles.hideButton} 
-            onPress={toggleHideValues}
-          >
-            <Text style={styles.hideButtonText}>{hideValues ? '👁' : '👁️'}</Text>
-          </TouchableOpacity>
         </View>
 
         <ScrollView style={styles.content}>
@@ -4796,6 +4815,72 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginTop: 6,
     letterSpacing: 0.5,
+  },
+  homeHeader: {
+    backgroundColor: '#667eea',
+    paddingTop: 18,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    shadowColor: '#667eea',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  homeHeaderTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  homeHeaderTitle: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  homeHeaderMetrics: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  homeMetricCard: {
+    flex: 1,
+    minWidth: '45%',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  homeMetricCardProfit: {
+    backgroundColor: 'rgba(52,199,89,0.22)',
+    borderColor: 'rgba(52,199,89,0.4)',
+  },
+  homeMetricCardLoss: {
+    backgroundColor: 'rgba(255,59,48,0.22)',
+    borderColor: 'rgba(255,59,48,0.4)',
+  },
+  homeMetricLabel: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  homeMetricValue: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  homeMetricProfit: {
+    color: '#A3F0B5',
+  },
+  homeMetricLoss: {
+    color: '#FFB3AE',
   },
   content: {
     flex: 1,
