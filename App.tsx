@@ -67,6 +67,9 @@ interface RetireSettings {
   targetBtc: number;
   useDecreasingCagr: boolean;
   withdrawalMonthlyBrl: number;
+  bearMarkets: number;       // quantos bear markets no período
+  bearDepth: number;         // queda % de cada crash
+  bearRecoveryYears: number; // anos para recuperar ao piso anterior
 }
 
 const DEFAULT_RETIRE_SETTINGS: RetireSettings = {
@@ -79,14 +82,17 @@ const DEFAULT_RETIRE_SETTINGS: RetireSettings = {
   targetBtc: 1,
   useDecreasingCagr: false,
   withdrawalMonthlyBrl: 10000,
+  bearMarkets: 0,
+  bearDepth: 75,
+  bearRecoveryYears: 2,
 };
 
 type RetireScenario = 'pessimista' | 'base' | 'otimista' | 'custom';
 
 const SCENARIO_PRESETS: Record<Exclude<RetireScenario, 'custom'>, Partial<RetireSettings>> = {
-  pessimista: { btcCagr: 20, useDecreasingCagr: true,  usdBrlCagr: 4, aporteGrowth: 0, ipca: 7   },
-  base:       { btcCagr: 40, useDecreasingCagr: true,  usdBrlCagr: 5, aporteGrowth: 3, ipca: 6   },
-  otimista:   { btcCagr: 60, useDecreasingCagr: false, usdBrlCagr: 8, aporteGrowth: 5, ipca: 4.5 },
+  pessimista: { btcCagr: 20, useDecreasingCagr: true,  usdBrlCagr: 4, aporteGrowth: 0, ipca: 7,   bearMarkets: 3, bearDepth: 80, bearRecoveryYears: 3 },
+  base:       { btcCagr: 40, useDecreasingCagr: true,  usdBrlCagr: 5, aporteGrowth: 3, ipca: 6,   bearMarkets: 2, bearDepth: 75, bearRecoveryYears: 2 },
+  otimista:   { btcCagr: 60, useDecreasingCagr: false, usdBrlCagr: 8, aporteGrowth: 5, ipca: 4.5, bearMarkets: 1, bearDepth: 70, bearRecoveryYears: 2 },
 };
 
 const COINGECKO_IDS: {[key: string]: string} = {
@@ -3160,21 +3166,58 @@ export default function App() {
       return base * 0.25;
     };
 
-    const simRows = (() => {
+    // Calcula os anos em que ocorrem bear markets (distribuídos uniformemente)
+    const bearYearSet = new Set<number>();
+    if (retireSettings.bearMarkets > 0) {
+      for (let k = 1; k <= retireSettings.bearMarkets; k++) {
+        const y = Math.round(retireSettings.targetYears * k / (retireSettings.bearMarkets + 1));
+        const safeY = Math.max(2, Math.min(retireSettings.targetYears - retireSettings.bearRecoveryYears, y));
+        bearYearSet.add(safeY);
+      }
+    }
+
+    const runSim = (withBears: boolean) => {
       const rows: any[] = [];
       let cumBTC = existingBTC;
       let pricePrev = btcPriceNow;
-      // Bug fix: custo médio dinâmico — atualiza à medida que BTC é comprado no futuro
       let totalCostUSD = existingBTC * avgCostUSD;
       const baseYear = new Date().getFullYear();
+      let inRecovery = 0;
+      let crashPrice = 0;
+      let recoveryEndPrice = 0;
+
       for (let y = 1; y <= retireSettings.targetYears; y++) {
-        const btcPrice = pricePrev * (1 + getYearCagr(y));
+        const cagr = getYearCagr(y);
+        const normalPrice = pricePrev * (1 + cagr);
+        let btcPrice: number;
+        let isBear = false;
+        let isRecovery = false;
+
+        if (withBears && bearYearSet.has(y)) {
+          // Ano de crash
+          btcPrice = pricePrev * (1 - retireSettings.bearDepth / 100);
+          isBear = true;
+          inRecovery = retireSettings.bearRecoveryYears;
+          crashPrice = btcPrice;
+          // Alvo de recuperação: preço que seria atingido ao fim do período de recuperação sem o crash
+          let target = normalPrice;
+          for (let i = 1; i <= retireSettings.bearRecoveryYears; i++) target *= (1 + getYearCagr(y + i));
+          recoveryEndPrice = target;
+        } else if (withBears && inRecovery > 0) {
+          // Anos de recuperação: interpolação geométrica em direção ao alvo
+          isRecovery = true;
+          const stepsDone = retireSettings.bearRecoveryYears - inRecovery + 1;
+          btcPrice = crashPrice * Math.pow(Math.max(1, recoveryEndPrice / crashPrice), stepsDone / retireSettings.bearRecoveryYears);
+          inRecovery--;
+        } else {
+          btcPrice = normalPrice;
+        }
+
         const usdBrl = dollarRateNow * Math.pow(1 + retireSettings.usdBrlCagr / 100, y);
         const monthlyBRL = effectiveAporte * Math.pow(1 + retireSettings.aporteGrowth / 100, y - 1);
-        // Bug fix: DCA usa média geométrica do preço ao longo do ano (mais realista)
         const avgYearPrice = Math.sqrt(pricePrev * btcPrice);
         const btcBought = monthlyBRL * 12 / (avgYearPrice * usdBrl);
-        totalCostUSD += btcBought * avgYearPrice; // custo médio dinâmico
+        totalCostUSD += btcBought * avgYearPrice;
         cumBTC += btcBought;
         const runningAvgCostUSD = cumBTC > 0 ? totalCostUSD / cumBTC : 0;
         const portfolioBRL = cumBTC * btcPrice * usdBrl;
@@ -3182,11 +3225,14 @@ export default function App() {
         const profitBRL = Math.max(0, (btcPrice - runningAvgCostUSD) * usdBrl) * cumBTC;
         const taxBRL = profitBRL * 0.15;
         const netBRL = portfolioBRL - taxBRL;
-        rows.push({ year: baseYear + y, btcPrice, usdBrl, monthlyBRL, btcBought, cumBTC, portfolioBRL, realBRL, taxBRL, netBRL, cagr: getYearCagr(y) * 100, avgCost: runningAvgCostUSD });
+        rows.push({ year: baseYear + y, btcPrice, usdBrl, monthlyBRL, btcBought, cumBTC, portfolioBRL, realBRL, taxBRL, netBRL, cagr: cagr * 100, avgCost: runningAvgCostUSD, isBear, isRecovery });
         pricePrev = btcPrice;
       }
       return rows;
-    })();
+    };
+
+    const simRows = runSim(true);
+    const simRowsNoBear = retireSettings.bearMarkets > 0 ? runSim(false) : simRows;
 
     const final = simRows[simRows.length - 1];
     const wBRL = retireSettings.withdrawalMonthlyBrl;
@@ -3293,6 +3339,8 @@ export default function App() {
             <Text style={styles.retireScenarioSummaryItem}>💵 USD/BRL: <Text style={{ fontWeight: '800' }}>{retireSettings.usdBrlCagr}%</Text></Text>
             <Text style={styles.retireScenarioSummaryItem}>💰 Aporte: <Text style={{ fontWeight: '800' }}>R${effectiveAporte.toFixed(0)}{retireSettings.aporteGrowth > 0 ? `+${retireSettings.aporteGrowth}%` : ' fixo'}</Text></Text>
             <Text style={styles.retireScenarioSummaryItem}>🔥 IPCA: <Text style={{ fontWeight: '800' }}>{retireSettings.ipca}%</Text></Text>
+            <Text style={styles.retireScenarioSummaryItem}>📉 Bears: <Text style={{ fontWeight: '800', color: retireSettings.bearMarkets > 0 ? '#FF3B30' : '#34C759' }}>{retireSettings.bearMarkets === 0 ? 'nenhum' : `${retireSettings.bearMarkets}x -${retireSettings.bearDepth}%`}</Text></Text>
+            <Text style={styles.retireScenarioSummaryItem}>📈 Recup.: <Text style={{ fontWeight: '800' }}>{retireSettings.bearRecoveryYears} anos</Text></Text>
           </View>
 
           {/* CONFIGURAÇÕES */}
@@ -3368,24 +3416,88 @@ export default function App() {
             </View>
           )}
 
+          {/* CARD DE IMPACTO DOS BEAR MARKETS */}
+          {retireSettings.bearMarkets > 0 && final && simRowsNoBear.length > 0 && (() => {
+            const finalNoBear = simRowsNoBear[simRowsNoBear.length - 1];
+            const worstRow = simRows.reduce((min, r) => r.portfolioBRL < min.portfolioBRL ? r : min, simRows[0]);
+            const btcExtra = final.cumBTC - finalNoBear.cumBTC;
+            const portfolioDiff = final.portfolioBRL - finalNoBear.portfolioBRL;
+            const monthsUnder = simRows.filter(r => r.btcPrice < r.avgCost * (currentDollarRate ?? 5.8)).length;
+            return (
+              <View style={[styles.chartCard, { borderLeftWidth: 3, borderLeftColor: '#FF3B30' }]}>
+                <Text style={styles.chartTitle}>📉 Impacto dos Bear Markets</Text>
+                <Text style={styles.chartSubtitle}>{retireSettings.bearMarkets} crash{retireSettings.bearMarkets > 1 ? 'es' : ''} de -{retireSettings.bearDepth}% com recup. de {retireSettings.bearRecoveryYears}a</Text>
+                <View style={styles.retireWithdrawGrid}>
+                  <View style={styles.retireWithdrawItem}>
+                    <Text style={styles.retireWithdrawLabel}>🟥 Pior patrimônio</Text>
+                    <Text style={[styles.retireWithdrawValue, { color: '#FF3B30' }]}>
+                      {hideValues ? '****' : worstRow.portfolioBRL >= 1e6 ? `R$ ${(worstRow.portfolioBRL / 1e6).toFixed(1)}M` : `R$ ${(worstRow.portfolioBRL / 1000).toFixed(0)}k`}
+                    </Text>
+                    <Text style={{ fontSize: 10, color: '#8E8E93' }}>em {worstRow.year}</Text>
+                  </View>
+                  <View style={styles.retireWithdrawItem}>
+                    <Text style={styles.retireWithdrawLabel}>⬇️ vs sem bears</Text>
+                    <Text style={[styles.retireWithdrawValue, { color: portfolioDiff >= 0 ? '#34C759' : '#FF3B30' }]}>
+                      {hideValues ? '****' : `${portfolioDiff >= 0 ? '+' : ''}${portfolioDiff >= 1e6 || portfolioDiff <= -1e6 ? `R$${(portfolioDiff / 1e6).toFixed(1)}M` : `R$${(portfolioDiff / 1000).toFixed(0)}k`}`}
+                    </Text>
+                    <Text style={{ fontSize: 10, color: '#8E8E93' }}>patrimônio final</Text>
+                  </View>
+                  <View style={styles.retireWithdrawItem}>
+                    <Text style={styles.retireWithdrawLabel}>⚡ BTC extra (DCA)</Text>
+                    <Text style={[styles.retireWithdrawValue, { color: btcExtra >= 0 ? '#34C759' : '#FF3B30' }]}>
+                      {hideValues ? '****' : `${btcExtra >= 0 ? '+' : ''}${(btcExtra * 1e8 / 1e6).toFixed(2)}M sats`}
+                    </Text>
+                    <Text style={{ fontSize: 10, color: '#8E8E93' }}>acum. extra nos crashes</Text>
+                  </View>
+                  <View style={styles.retireWithdrawItem}>
+                    <Text style={styles.retireWithdrawLabel}>🟥 Anos no negativo</Text>
+                    <Text style={[styles.retireWithdrawValue, { color: monthsUnder > 0 ? '#FF9500' : '#34C759' }]}>
+                      {monthsUnder} {monthsUnder === 1 ? 'ano' : 'anos'}
+                    </Text>
+                    <Text style={{ fontSize: 10, color: '#8E8E93' }}>BTC abaixo do custo médio</Text>
+                  </View>
+                </View>
+                {btcExtra > 0 && (
+                  <View style={[styles.retireWithdrawBanner, { backgroundColor: 'rgba(52,199,89,0.08)', borderColor: 'rgba(52,199,89,0.2)' }]}>
+                    <Text style={styles.retireWithdrawBannerText}>
+                      💡 DCA durante quedas comprou <Text style={{ fontWeight: '800', color: '#34C759' }}>{(btcExtra * 1e8).toFixed(0)} sats extras</Text> vs sem crash — o bear market trabalhou a seu favor!
+                    </Text>
+                  </View>
+                )}
+                {btcExtra <= 0 && (
+                  <View style={[styles.retireWithdrawBanner, { backgroundColor: 'rgba(255,59,48,0.08)', borderColor: 'rgba(255,59,48,0.2)' }]}>
+                    <Text style={styles.retireWithdrawBannerText}>
+                      ⚠️ Neste cenário a recuperação é lenta demais para compensar a perda de tempo de valorização.
+                    </Text>
+                  </View>
+                )}
+              </View>
+            );
+          })()}
+
           {/* GRÁFICO DE EVOLUÇÃO */}
           {simRows.length > 0 && (
             <View style={styles.chartCard}>
               <Text style={styles.chartTitle}>📈 Evolução do Patrimônio</Text>
-              <Text style={styles.chartSubtitle}>Valor bruto e real (desc. inflação) em BRL por ano</Text>
+              <Text style={styles.chartSubtitle}>Valor bruto em BRL — 📉 crash • 🟠 recuperação • 🟣 normal</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 <View style={[styles.barChart, { height: BAR_H_R + 60 }]}>
-                  {simRows.map(r => (
-                    <View key={r.year} style={[styles.barItem, { height: BAR_H_R + 60, width: 52 }]}>
-                      <Text style={[styles.barTopLabel, { color: '#667eea', fontSize: 8 }]}>
-                        {r.portfolioBRL >= 1e9 ? `${(r.portfolioBRL / 1e9).toFixed(1)}bi` : `${(r.portfolioBRL / 1e6).toFixed(0)}M`}
-                      </Text>
-                      <View style={{ flex: 1, justifyContent: 'flex-end', gap: 1 }}>
-                        <View style={[styles.barFill, { height: (r.portfolioBRL / maxPortfolio) * BAR_H_R, backgroundColor: '#F7931A', borderTopLeftRadius: 5, borderTopRightRadius: 5 }]} />
+                  {simRows.map(r => {
+                    const barColor = r.isBear ? '#FF3B30' : r.isRecovery ? '#FF9500' : '#F7931A';
+                    return (
+                      <View key={r.year} style={[styles.barItem, { height: BAR_H_R + 60, width: 52 }]}>
+                        <Text style={[styles.barTopLabel, { color: barColor, fontSize: 8 }]}>
+                          {r.portfolioBRL >= 1e9 ? `${(r.portfolioBRL / 1e9).toFixed(1)}bi` : `${(r.portfolioBRL / 1e6).toFixed(0)}M`}
+                        </Text>
+                        <View style={{ flex: 1, justifyContent: 'flex-end', gap: 1 }}>
+                          <View style={[styles.barFill, { height: (r.portfolioBRL / maxPortfolio) * BAR_H_R, backgroundColor: barColor, borderTopLeftRadius: 5, borderTopRightRadius: 5 }]} />
+                        </View>
+                        <Text style={[styles.barBottomLabel, r.isBear && { color: '#FF3B30', fontWeight: '700' }]}>
+                          {r.isBear ? '📉' : r.isRecovery ? '🟠' : ''}{String(r.year).substring(2)}
+                        </Text>
                       </View>
-                      <Text style={styles.barBottomLabel}>{String(r.year).substring(2)}</Text>
-                    </View>
-                  ))}
+                    );
+                  })}
                 </View>
               </ScrollView>
             </View>
@@ -3403,18 +3515,20 @@ export default function App() {
                     ))}
                   </View>
                   {simRows.map(r => (
-                    <View key={r.year} style={styles.retireTableRow}>
-                      <Text style={styles.retireTableCell}>{r.year}</Text>
+                    <View key={r.year} style={[styles.retireTableRow, r.isBear && { backgroundColor: 'rgba(255,59,48,0.06)' }, r.isRecovery && { backgroundColor: 'rgba(255,149,0,0.06)' }]}>
+                      <Text style={[styles.retireTableCell, { fontWeight: r.isBear ? '800' : '500' }]}>
+                        {r.isBear ? '📉' : r.isRecovery ? '🟠' : ''}{r.year}
+                      </Text>
                       <Text style={styles.retireTableCell}>{(r.btcBought / 12 * 1e6).toFixed(0)} sats</Text>
                       <Text style={styles.retireTableCell}>{hideValues ? '***' : r.cumBTC.toFixed(4)}</Text>
-                      <Text style={[styles.retireTableCell, { color: '#F7931A' }]}>{hideValues ? '***' : r.portfolioBRL >= 1e6 ? `${(r.portfolioBRL / 1e6).toFixed(1)}M` : `${(r.portfolioBRL / 1000).toFixed(0)}k`}</Text>
+                      <Text style={[styles.retireTableCell, { color: r.isBear ? '#FF3B30' : '#F7931A' }]}>{hideValues ? '***' : r.portfolioBRL >= 1e6 ? `${(r.portfolioBRL / 1e6).toFixed(1)}M` : `${(r.portfolioBRL / 1000).toFixed(0)}k`}</Text>
                       <Text style={[styles.retireTableCell, { color: '#667eea' }]}>{hideValues ? '***' : r.realBRL >= 1e6 ? `${(r.realBRL / 1e6).toFixed(1)}M` : `${(r.realBRL / 1000).toFixed(0)}k`}</Text>
                       <Text style={[styles.retireTableCell, { color: '#34C759' }]}>{hideValues ? '***' : r.netBRL >= 1e6 ? `${(r.netBRL / 1e6).toFixed(1)}M` : `${(r.netBRL / 1000).toFixed(0)}k`}</Text>
                     </View>
                   ))}
                 </View>
               </ScrollView>
-              <Text style={styles.retireTableNote}>* Valores em R$ | IR = 15% s/ lucro na liquidação total</Text>
+              <Text style={styles.retireTableNote}>📉 crash • 🟠 recuperação • IR = 15% s/ lucro | valores em R$</Text>
             </View>
           )}
 
