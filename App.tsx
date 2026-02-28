@@ -3187,35 +3187,41 @@ export default function App() {
 
     // Calcula os anos-simulação dos crashes (y=1 → 2027, etc.)
     const bearYearSet = new Set<number>();
+    // spacing mínimo = bearRecoveryYears + 1 para evitar sobreposição crash/recuperação
+    const bearSpacing = retireSettings.bearMarkets > 0
+      ? Math.max(retireSettings.bearRecoveryYears + 1, Math.round(retireSettings.targetYears / retireSettings.bearMarkets))
+      : 0;
     if (retireSettings.bearMarkets > 0) {
       if (bsy === 0) {
-        // 0 = automático: distribui uniformemente
+        // automático: distribui uniformemente com spacing seguro
         for (let k = 1; k <= retireSettings.bearMarkets; k++) {
-          const y = Math.round(retireSettings.targetYears * k / (retireSettings.bearMarkets + 1));
-          const safeY = Math.max(2, Math.min(retireSettings.targetYears - retireSettings.bearRecoveryYears, y));
+          const y = bearSpacing * k;
+          const safeY = Math.max(1, Math.min(retireSettings.targetYears - retireSettings.bearRecoveryYears, y));
           bearYearSet.add(safeY);
         }
       } else if (crashNow) {
-        // Crash atual: 1º crash já está acontecendo (y=0), próximos espaçados uniformemente
-        const spacing = Math.round(retireSettings.targetYears / retireSettings.bearMarkets);
+        // crash atual: 1º crash já acontecendo (y=0), próximos a partir de bearSpacing
         for (let k = 1; k < retireSettings.bearMarkets; k++) {
-          const y = spacing * k;
+          const y = bearSpacing * k;
           if (y <= retireSettings.targetYears - retireSettings.bearRecoveryYears)
             bearYearSet.add(y);
         }
       } else {
-        // Ano futuro específico: distribui uniformemente a partir do 1º crash
+        // ano futuro específico: distribui a partir do 1º crash com spacing seguro
         const y1 = bsy - currentYear;
         const safeY1 = Math.max(1, Math.min(retireSettings.targetYears - retireSettings.bearRecoveryYears, y1));
         bearYearSet.add(safeY1);
-        const spacing = Math.round(retireSettings.targetYears / retireSettings.bearMarkets);
         for (let k = 1; k < retireSettings.bearMarkets; k++) {
-          const y = safeY1 + spacing * k;
+          const y = safeY1 + bearSpacing * k;
           if (y <= retireSettings.targetYears - retireSettings.bearRecoveryYears)
             bearYearSet.add(y);
         }
       }
     }
+    // total de crashes efetivamente simulados (crashNow = 1 implícito fora do set)
+    const simulatedBears = retireSettings.bearMarkets > 0
+      ? bearYearSet.size + (crashNow ? 1 : 0)
+      : 0;
 
     const runSim = (withBears: boolean) => {
       const rows: any[] = [];
@@ -3473,7 +3479,9 @@ export default function App() {
             return (
               <View style={[styles.chartCard, { borderLeftWidth: 3, borderLeftColor: '#FF3B30' }]}>
                 <Text style={styles.chartTitle}>📉 Impacto dos Bear Markets</Text>
-                <Text style={styles.chartSubtitle}>{retireSettings.bearMarkets} crash{retireSettings.bearMarkets > 1 ? 'es' : ''} de -{retireSettings.bearDepth}% com recup. de {retireSettings.bearRecoveryYears}a</Text>
+                <Text style={styles.chartSubtitle}>
+                  {simulatedBears} de {retireSettings.bearMarkets} crash{retireSettings.bearMarkets > 1 ? 'es' : ''} de -{retireSettings.bearDepth}% com recup. de {retireSettings.bearRecoveryYears}a{simulatedBears < retireSettings.bearMarkets ? `  ⚠️ ${retireSettings.bearMarkets - simulatedBears} fora do horizonte` : ''}
+                </Text>
                 <View style={styles.retireWithdrawGrid}>
                   <View style={styles.retireWithdrawItem}>
                     <Text style={styles.retireWithdrawLabel}>🟥 Pior patrimônio</Text>
