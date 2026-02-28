@@ -70,6 +70,7 @@ interface RetireSettings {
   bearMarkets: number;       // quantos bear markets no período
   bearDepth: number;         // queda % de cada crash
   bearRecoveryYears: number; // anos para recuperar ao piso anterior
+  bearStartYear: number;     // ano calendário do 1º crash (0 = automático)
 }
 
 const DEFAULT_RETIRE_SETTINGS: RetireSettings = {
@@ -85,14 +86,15 @@ const DEFAULT_RETIRE_SETTINGS: RetireSettings = {
   bearMarkets: 0,
   bearDepth: 75,
   bearRecoveryYears: 2,
+  bearStartYear: 0,
 };
 
 type RetireScenario = 'pessimista' | 'base' | 'otimista' | 'custom';
 
 const SCENARIO_PRESETS: Record<Exclude<RetireScenario, 'custom'>, Partial<RetireSettings>> = {
-  pessimista: { btcCagr: 20, useDecreasingCagr: true,  usdBrlCagr: 4, aporteGrowth: 0, ipca: 7,   bearMarkets: 3, bearDepth: 80, bearRecoveryYears: 3 },
-  base:       { btcCagr: 40, useDecreasingCagr: true,  usdBrlCagr: 5, aporteGrowth: 3, ipca: 6,   bearMarkets: 2, bearDepth: 75, bearRecoveryYears: 2 },
-  otimista:   { btcCagr: 60, useDecreasingCagr: false, usdBrlCagr: 8, aporteGrowth: 5, ipca: 4.5, bearMarkets: 1, bearDepth: 70, bearRecoveryYears: 2 },
+  pessimista: { btcCagr: 20, useDecreasingCagr: true,  usdBrlCagr: 4, aporteGrowth: 0, ipca: 7,   bearMarkets: 3, bearDepth: 80, bearRecoveryYears: 3, bearStartYear: 0 },
+  base:       { btcCagr: 40, useDecreasingCagr: true,  usdBrlCagr: 5, aporteGrowth: 3, ipca: 6,   bearMarkets: 2, bearDepth: 75, bearRecoveryYears: 2, bearStartYear: 0 },
+  otimista:   { btcCagr: 60, useDecreasingCagr: false, usdBrlCagr: 8, aporteGrowth: 5, ipca: 4.5, bearMarkets: 1, bearDepth: 70, bearRecoveryYears: 2, bearStartYear: 0 },
 };
 
 const COINGECKO_IDS: {[key: string]: string} = {
@@ -3166,25 +3168,65 @@ export default function App() {
       return base * 0.25;
     };
 
-    // Calcula os anos em que ocorrem bear markets (distribuídos uniformemente)
+    const currentYear = new Date().getFullYear();
+    const bsy = retireSettings.bearStartYear;
+    // crashNow = bear iniciou no ano atual (preço de entrada já crashado)
+    const crashNow = retireSettings.bearMarkets > 0 && bsy > 0 && bsy <= currentYear;
+    // Preço de entrada da simulação: se crash agora, já aplica a queda
+    const simStartPrice = crashNow
+      ? btcPriceNow * (1 - retireSettings.bearDepth / 100)
+      : btcPriceNow;
+
+    // Alvo de recuperação para crash atual: preço normal ao fim da recuperação
+    const crashNowRecoveryTarget = (() => {
+      if (!crashNow) return 0;
+      let t = btcPriceNow; // preço pré-crash como referência
+      for (let i = 1; i <= retireSettings.bearRecoveryYears; i++) t *= (1 + getYearCagr(i));
+      return t;
+    })();
+
+    // Calcula os anos-simulação dos crashes (y=1 → 2027, etc.)
     const bearYearSet = new Set<number>();
     if (retireSettings.bearMarkets > 0) {
-      for (let k = 1; k <= retireSettings.bearMarkets; k++) {
-        const y = Math.round(retireSettings.targetYears * k / (retireSettings.bearMarkets + 1));
-        const safeY = Math.max(2, Math.min(retireSettings.targetYears - retireSettings.bearRecoveryYears, y));
-        bearYearSet.add(safeY);
+      if (bsy === 0) {
+        // 0 = automático: distribui uniformemente
+        for (let k = 1; k <= retireSettings.bearMarkets; k++) {
+          const y = Math.round(retireSettings.targetYears * k / (retireSettings.bearMarkets + 1));
+          const safeY = Math.max(2, Math.min(retireSettings.targetYears - retireSettings.bearRecoveryYears, y));
+          bearYearSet.add(safeY);
+        }
+      } else if (crashNow) {
+        // Crash atual: anos extras (2º, 3º bear) espaçados após a recuperação
+        const spacing = retireSettings.bearRecoveryYears + 3;
+        for (let k = 1; k < retireSettings.bearMarkets; k++) {
+          const y = retireSettings.bearRecoveryYears + spacing * k;
+          if (y <= retireSettings.targetYears - retireSettings.bearRecoveryYears)
+            bearYearSet.add(y);
+        }
+      } else {
+        // Ano futuro específico
+        const y1 = bsy - currentYear;
+        const safeY1 = Math.max(1, Math.min(retireSettings.targetYears - retireSettings.bearRecoveryYears, y1));
+        bearYearSet.add(safeY1);
+        const spacing = retireSettings.bearRecoveryYears + 3;
+        for (let k = 1; k < retireSettings.bearMarkets; k++) {
+          const y = safeY1 + spacing * k;
+          if (y <= retireSettings.targetYears - retireSettings.bearRecoveryYears)
+            bearYearSet.add(y);
+        }
       }
     }
 
     const runSim = (withBears: boolean) => {
       const rows: any[] = [];
       let cumBTC = existingBTC;
-      let pricePrev = btcPriceNow;
+      // Se crash agora, simulação começa do preço já crashado
+      let pricePrev = withBears && crashNow ? simStartPrice : btcPriceNow;
       let totalCostUSD = existingBTC * avgCostUSD;
-      const baseYear = new Date().getFullYear();
-      let inRecovery = 0;
-      let crashPrice = 0;
-      let recoveryEndPrice = 0;
+      // Se crash agora, anos 1..bearRecoveryYears já são recuperação
+      let inRecovery = withBears && crashNow ? retireSettings.bearRecoveryYears : 0;
+      let crashPrice = withBears && crashNow ? simStartPrice : 0;
+      let recoveryEndPrice = withBears && crashNow ? crashNowRecoveryTarget : 0;
 
       for (let y = 1; y <= retireSettings.targetYears; y++) {
         const cagr = getYearCagr(y);
@@ -3194,17 +3236,16 @@ export default function App() {
         let isRecovery = false;
 
         if (withBears && bearYearSet.has(y)) {
-          // Ano de crash
+          // Ano de crash futuro
           btcPrice = pricePrev * (1 - retireSettings.bearDepth / 100);
           isBear = true;
           inRecovery = retireSettings.bearRecoveryYears;
           crashPrice = btcPrice;
-          // Alvo de recuperação: preço que seria atingido ao fim do período de recuperação sem o crash
           let target = normalPrice;
           for (let i = 1; i <= retireSettings.bearRecoveryYears; i++) target *= (1 + getYearCagr(y + i));
           recoveryEndPrice = target;
         } else if (withBears && inRecovery > 0) {
-          // Anos de recuperação: interpolação geométrica em direção ao alvo
+          // Ano de recuperação (inclui crash atual)
           isRecovery = true;
           const stepsDone = retireSettings.bearRecoveryYears - inRecovery + 1;
           btcPrice = crashPrice * Math.pow(Math.max(1, recoveryEndPrice / crashPrice), stepsDone / retireSettings.bearRecoveryYears);
@@ -3225,7 +3266,7 @@ export default function App() {
         const profitBRL = Math.max(0, (btcPrice - runningAvgCostUSD) * usdBrl) * cumBTC;
         const taxBRL = profitBRL * 0.15;
         const netBRL = portfolioBRL - taxBRL;
-        rows.push({ year: baseYear + y, btcPrice, usdBrl, monthlyBRL, btcBought, cumBTC, portfolioBRL, realBRL, taxBRL, netBRL, cagr: cagr * 100, avgCost: runningAvgCostUSD, isBear, isRecovery });
+        rows.push({ year: currentYear + y, btcPrice, usdBrl, monthlyBRL, btcBought, cumBTC, portfolioBRL, realBRL, taxBRL, netBRL, cagr: cagr * 100, avgCost: runningAvgCostUSD, isBear, isRecovery });
         pricePrev = btcPrice;
       }
       return rows;
@@ -3340,7 +3381,7 @@ export default function App() {
             <Text style={styles.retireScenarioSummaryItem}>💰 Aporte: <Text style={{ fontWeight: '800' }}>R${effectiveAporte.toFixed(0)}{retireSettings.aporteGrowth > 0 ? `+${retireSettings.aporteGrowth}%` : ' fixo'}</Text></Text>
             <Text style={styles.retireScenarioSummaryItem}>🔥 IPCA: <Text style={{ fontWeight: '800' }}>{retireSettings.ipca}%</Text></Text>
             <Text style={styles.retireScenarioSummaryItem}>📉 Bears: <Text style={{ fontWeight: '800', color: retireSettings.bearMarkets > 0 ? '#FF3B30' : '#34C759' }}>{retireSettings.bearMarkets === 0 ? 'nenhum' : `${retireSettings.bearMarkets}x -${retireSettings.bearDepth}%`}</Text></Text>
-            <Text style={styles.retireScenarioSummaryItem}>📈 Recup.: <Text style={{ fontWeight: '800' }}>{retireSettings.bearRecoveryYears} anos</Text></Text>
+            <Text style={styles.retireScenarioSummaryItem}>📈 Recup.: <Text style={{ fontWeight: '800' }}>{retireSettings.bearRecoveryYears} anos{retireSettings.bearStartYear > 0 ? ` (a partir de ${retireSettings.bearStartYear <= new Date().getFullYear() ? 'agora' : retireSettings.bearStartYear})` : ''}</Text></Text>
           </View>
 
           {/* CONFIGURAÇÕES */}
@@ -3385,6 +3426,7 @@ export default function App() {
               {numInput('📉 Nº de bears', 'bearMarkets', 'crashes', 'Histórico: ~1 por ciclo de 4 anos | 0 = sem crashes')}
               {numInput('⬇️ Queda por crash', 'bearDepth', '%', 'BTC 2022: -77% | 2018: -84% | 2015: -86%')}
               {numInput('📈 Duração da recuperação', 'bearRecoveryYears', 'anos', 'Anos até voltar ao preço anterior ao crash')}
+              {numInput('📅 Ano do 1º crash', 'bearStartYear', '', `0 = automático | ${new Date().getFullYear()} = crash agora | ex: ${new Date().getFullYear() + 2} = daqui 2 anos`)}
             </View>
           )}
 
