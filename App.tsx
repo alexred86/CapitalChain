@@ -3196,19 +3196,19 @@ export default function App() {
           bearYearSet.add(safeY);
         }
       } else if (crashNow) {
-        // Crash atual: anos extras (2º, 3º bear) espaçados após a recuperação
-        const spacing = retireSettings.bearRecoveryYears + 3;
+        // Crash atual: 1º crash já está acontecendo (y=0), próximos espaçados uniformemente
+        const spacing = Math.round(retireSettings.targetYears / retireSettings.bearMarkets);
         for (let k = 1; k < retireSettings.bearMarkets; k++) {
-          const y = retireSettings.bearRecoveryYears + spacing * k;
+          const y = spacing * k;
           if (y <= retireSettings.targetYears - retireSettings.bearRecoveryYears)
             bearYearSet.add(y);
         }
       } else {
-        // Ano futuro específico
+        // Ano futuro específico: distribui uniformemente a partir do 1º crash
         const y1 = bsy - currentYear;
         const safeY1 = Math.max(1, Math.min(retireSettings.targetYears - retireSettings.bearRecoveryYears, y1));
         bearYearSet.add(safeY1);
-        const spacing = retireSettings.bearRecoveryYears + 3;
+        const spacing = Math.round(retireSettings.targetYears / retireSettings.bearMarkets);
         for (let k = 1; k < retireSettings.bearMarkets; k++) {
           const y = safeY1 + spacing * k;
           if (y <= retireSettings.targetYears - retireSettings.bearRecoveryYears)
