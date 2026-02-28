@@ -3380,6 +3380,11 @@ export default function App() {
 
               <Text style={styles.retireConfigSection}>Simulação de Renda</Text>
               {numInput('🏠 Renda mensal desejada', 'withdrawalMonthlyBrl', 'R$/mês', 'Quanto quer sacar por mês na aposentadoria')}
+
+              <Text style={styles.retireConfigSection}>📉 Bear Markets</Text>
+              {numInput('📉 Nº de bears', 'bearMarkets', 'crashes', 'Histórico: ~1 por ciclo de 4 anos | 0 = sem crashes')}
+              {numInput('⬇️ Queda por crash', 'bearDepth', '%', 'BTC 2022: -77% | 2018: -84% | 2015: -86%')}
+              {numInput('📈 Duração da recuperação', 'bearRecoveryYears', 'anos', 'Anos até voltar ao preço anterior ao crash')}
             </View>
           )}
 
