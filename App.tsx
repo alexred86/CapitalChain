@@ -3164,19 +3164,25 @@ export default function App() {
       const rows: any[] = [];
       let cumBTC = existingBTC;
       let pricePrev = btcPriceNow;
+      // Bug fix: custo médio dinâmico — atualiza à medida que BTC é comprado no futuro
+      let totalCostUSD = existingBTC * avgCostUSD;
       const baseYear = new Date().getFullYear();
       for (let y = 1; y <= retireSettings.targetYears; y++) {
         const btcPrice = pricePrev * (1 + getYearCagr(y));
         const usdBrl = dollarRateNow * Math.pow(1 + retireSettings.usdBrlCagr / 100, y);
         const monthlyBRL = effectiveAporte * Math.pow(1 + retireSettings.aporteGrowth / 100, y - 1);
-        const btcBought = monthlyBRL * 12 / (btcPrice * usdBrl);
+        // Bug fix: DCA usa média geométrica do preço ao longo do ano (mais realista)
+        const avgYearPrice = Math.sqrt(pricePrev * btcPrice);
+        const btcBought = monthlyBRL * 12 / (avgYearPrice * usdBrl);
+        totalCostUSD += btcBought * avgYearPrice; // custo médio dinâmico
         cumBTC += btcBought;
+        const runningAvgCostUSD = cumBTC > 0 ? totalCostUSD / cumBTC : 0;
         const portfolioBRL = cumBTC * btcPrice * usdBrl;
         const realBRL = portfolioBRL / Math.pow(1 + retireSettings.ipca / 100, y);
-        const profitBRL = Math.max(0, (btcPrice - avgCostUSD) * usdBrl) * cumBTC;
+        const profitBRL = Math.max(0, (btcPrice - runningAvgCostUSD) * usdBrl) * cumBTC;
         const taxBRL = profitBRL * 0.15;
         const netBRL = portfolioBRL - taxBRL;
-        rows.push({ year: baseYear + y, btcPrice, usdBrl, monthlyBRL, btcBought, cumBTC, portfolioBRL, realBRL, taxBRL, netBRL, cagr: getYearCagr(y) * 100 });
+        rows.push({ year: baseYear + y, btcPrice, usdBrl, monthlyBRL, btcBought, cumBTC, portfolioBRL, realBRL, taxBRL, netBRL, cagr: getYearCagr(y) * 100, avgCost: runningAvgCostUSD });
         pricePrev = btcPrice;
       }
       return rows;
@@ -3281,6 +3287,14 @@ export default function App() {
             })}
           </View>
 
+          {/* RESUMO DO CENÁRIO ATIVO */}
+          <View style={styles.retireScenarioSummary}>
+            <Text style={styles.retireScenarioSummaryItem}>📈 CAGR: <Text style={{ fontWeight: '800' }}>{retireSettings.btcCagr}%{retireSettings.useDecreasingCagr ? ' ↓' : ''}</Text></Text>
+            <Text style={styles.retireScenarioSummaryItem}>💵 USD/BRL: <Text style={{ fontWeight: '800' }}>{retireSettings.usdBrlCagr}%</Text></Text>
+            <Text style={styles.retireScenarioSummaryItem}>💰 Aporte: <Text style={{ fontWeight: '800' }}>R${effectiveAporte.toFixed(0)}{retireSettings.aporteGrowth > 0 ? `+${retireSettings.aporteGrowth}%` : ' fixo'}</Text></Text>
+            <Text style={styles.retireScenarioSummaryItem}>🔥 IPCA: <Text style={{ fontWeight: '800' }}>{retireSettings.ipca}%</Text></Text>
+          </View>
+
           {/* CONFIGURAÇÕES */}
           <TouchableOpacity style={styles.retireConfigHeader} onPress={() => setShowRetireConfig(!showRetireConfig)} activeOpacity={0.8}>
             <Text style={styles.retireConfigHeaderText}>⚙️ Configurações da Simulação</Text>
@@ -3309,8 +3323,8 @@ export default function App() {
               </View>
 
               <Text style={styles.retireConfigSection}>Aportes</Text>
-              {numInput('💰 Aporte mensal', 'aporteMensal', 'R$', effectiveAporte > 0 ? `Auto: R$ ${autoAporteBRL.toFixed(0)} — 0 = usar auto` : 'Valor médio mensal em BRL')}
-              {numInput('📈 Cres. do aporte', 'aporteGrowth', '% a.a.', 'Quanto aumentará o aporte por ano')}
+              {numInput('💰 Aporte mensal', 'aporteMensal', 'R$', `Auto: R$ ${autoAporteBRL.toFixed(0)}/mês do histórico — 0 = usar auto`)}
+              {numInput('📈 Crescimento anual', 'aporteGrowth', '% a.a.', retireSettings.aporteGrowth === 0 ? '0% = aporte fixo (sem aumento). Para parar aportes, set acima como 1.' : 'Aumento % do aporte por ano (reajuste salarial)')}
 
               <Text style={styles.retireConfigSection}>Macro</Text>
               {numInput('💵 CAGR USD/BRL', 'usdBrlCagr', '% a.a.', 'Desvalorização histórica: ~7% a.a.')}
@@ -7973,6 +7987,23 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#3C3C43',
     textAlign: 'center',
+  },
+  retireScenarioSummary: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    backgroundColor: '#F1F3F6',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 12,
+  },
+  retireScenarioSummaryItem: {
+    fontSize: 12,
+    color: '#8E8E93',
+    fontWeight: '400',
+    minWidth: '40%',
+    flex: 1,
   },
   btcChartsHeader: {
     backgroundColor: '#F7931A',
