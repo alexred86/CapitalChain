@@ -55,6 +55,31 @@ const TAX_LOSSES_KEY = '@crypto_tax_losses';
 const HIDE_VALUES_KEY = '@hide_values_pref';
 const DECL_PERCENT_KEY = '@declaration_percent';
 const LAST_BACKUP_KEY = '@last_backup_date';
+const RETIRE_SETTINGS_KEY = '@retire_settings';
+
+interface RetireSettings {
+  targetYears: number;
+  btcCagr: number;
+  usdBrlCagr: number;
+  aporteMensal: number;
+  aporteGrowth: number;
+  ipca: number;
+  targetBtc: number;
+  useDecreasingCagr: boolean;
+  withdrawalMonthlyBrl: number;
+}
+
+const DEFAULT_RETIRE_SETTINGS: RetireSettings = {
+  targetYears: 15,
+  btcCagr: 55,
+  usdBrlCagr: 7,
+  aporteMensal: 0,
+  aporteGrowth: 5,
+  ipca: 4.5,
+  targetBtc: 1,
+  useDecreasingCagr: false,
+  withdrawalMonthlyBrl: 10000,
+};
 
 const COINGECKO_IDS: {[key: string]: string} = {
   'BTC': 'bitcoin', 'ETH': 'ethereum', 'SOL': 'solana', 'BNB': 'binancecoin',
@@ -135,7 +160,7 @@ const formatDate = (dateString: string): string => {
 };
 
 export default function App() {
-  const [screen, setScreen] = useState<'home' | 'add' | 'sell' | 'history' | 'taxes' | 'more' | 'charts'>('home');
+  const [screen, setScreen] = useState<'home' | 'add' | 'sell' | 'history' | 'taxes' | 'more' | 'charts' | 'retire'>('home');
   const [purchases, setPurchases] = useState<CryptoPurchase[]>([]);
   const [sales, setSales] = useState<CryptoSale[]>([]);
   const [taxLosses, setTaxLosses] = useState<{[year: string]: number}>({});
@@ -203,12 +228,15 @@ export default function App() {
   const [currentDollarRate, setCurrentDollarRate] = useState<number | null>(null);
   const [currentBtcPrice, setCurrentBtcPrice] = useState<number | null>(null);
   const [currentPrices, setCurrentPrices] = useState<{[coin: string]: number}>({});
+  const [retireSettings, setRetireSettings] = useState<RetireSettings>(DEFAULT_RETIRE_SETTINGS);
+  const [showRetireConfig, setShowRetireConfig] = useState(false);
 
   useEffect(() => {
     checkBiometricSupport();
     loadData();
     fetchDollarRate();
     fetchBtcPrice();
+    loadRetireSettings();
   }, []);
 
   useEffect(() => {
@@ -463,6 +491,21 @@ export default function App() {
     } catch (e) {
       console.error('Erro ao buscar preços:', e);
     }
+  };
+
+  const loadRetireSettings = async () => {
+    try {
+      const saved = await AsyncStorage.getItem(RETIRE_SETTINGS_KEY);
+      if (saved) setRetireSettings({ ...DEFAULT_RETIRE_SETTINGS, ...JSON.parse(saved) });
+    } catch (e) {}
+  };
+
+  const updateRetireSetting = async <K extends keyof RetireSettings>(key: K, value: RetireSettings[K]) => {
+    setRetireSettings(prev => {
+      const next = { ...prev, [key]: value };
+      AsyncStorage.setItem(RETIRE_SETTINGS_KEY, JSON.stringify(next));
+      return next;
+    });
   };
 
   // Calculadora de Imposto Pré-Venda
@@ -1967,9 +2010,9 @@ export default function App() {
         <Text style={styles.tabIcon}>📊</Text>
         <Text style={screen === 'charts' ? styles.tabTextActive : styles.tabText}>Gráficos</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={[styles.tab, (screen === 'more' || screen === 'taxes') && styles.tabActive]} onPress={() => setScreen('more')}>
+      <TouchableOpacity style={[styles.tab, (screen === 'more' || screen === 'taxes' || screen === 'retire') && styles.tabActive]} onPress={() => setScreen('more')}>
         <Text style={styles.tabIcon}>⚙️</Text>
-        <Text style={(screen === 'more' || screen === 'taxes') ? styles.tabTextActive : styles.tabText}>Mais</Text>
+        <Text style={(screen === 'more' || screen === 'taxes' || screen === 'retire') ? styles.tabTextActive : styles.tabText}>Mais</Text>
       </TouchableOpacity>
     </View>
   );
@@ -3061,8 +3104,296 @@ export default function App() {
     );
   }
 
+  if (screen === 'retire') {
+    const btcPurchases = purchases.filter(p => p.coin.toUpperCase() === 'BTC').sort((a, b) => a.date.localeCompare(b.date));
+    const existingBTC = btcPurchases.reduce((s, p) => s + p.quantity, 0);
+    const totalInvestedUSD = btcPurchases.reduce((s, p) => s + p.pricePaid, 0);
+    const avgCostUSD = existingBTC > 0 ? totalInvestedUSD / existingBTC : 0;
+    const btcPriceNow = currentBtcPrice ?? 85000;
+    const dollarRateNow = currentDollarRate ?? 5.8;
+
+    const autoAporteBRL = (() => {
+      if (btcPurchases.length < 2) return 0;
+      const first = new Date(btcPurchases[0].date);
+      const last = new Date(btcPurchases[btcPurchases.length - 1].date);
+      const months = Math.max(1, (last.getFullYear() - first.getFullYear()) * 12 + (last.getMonth() - first.getMonth()));
+      return btcPurchases.reduce((s, p) => s + p.pricePaid * p.dollarRate, 0) / months;
+    })();
+    const effectiveAporte = retireSettings.aporteMensal > 0 ? retireSettings.aporteMensal : autoAporteBRL;
+
+    const monthsSinceFirst = (() => {
+      if (btcPurchases.length === 0) return 1;
+      const first = new Date(btcPurchases[0].date);
+      const now = new Date();
+      return Math.max(1, (now.getFullYear() - first.getFullYear()) * 12 + (now.getMonth() - first.getMonth()));
+    })();
+    const actualMonthlyBTC = monthsSinceFirst > 0 ? existingBTC / monthsSinceFirst : 0;
+    const btcNeeded = Math.max(0, retireSettings.targetBtc - existingBTC);
+    const requiredMonthlyBTC = retireSettings.targetYears > 0 ? btcNeeded / (retireSettings.targetYears * 12) : 0;
+    const onTrackPct = existingBTC >= retireSettings.targetBtc ? 200
+      : requiredMonthlyBTC > 0 ? Math.min(200, (actualMonthlyBTC / requiredMonthlyBTC) * 100) : 0;
+
+    const getYearCagr = (y: number): number => {
+      const base = retireSettings.btcCagr / 100;
+      if (!retireSettings.useDecreasingCagr) return base;
+      if (y <= 4) return base;
+      if (y <= 8) return base * 0.65;
+      if (y <= 12) return base * 0.40;
+      return base * 0.25;
+    };
+
+    const simRows = (() => {
+      const rows: any[] = [];
+      let cumBTC = existingBTC;
+      let pricePrev = btcPriceNow;
+      const baseYear = new Date().getFullYear();
+      for (let y = 1; y <= retireSettings.targetYears; y++) {
+        const btcPrice = pricePrev * (1 + getYearCagr(y));
+        const usdBrl = dollarRateNow * Math.pow(1 + retireSettings.usdBrlCagr / 100, y);
+        const monthlyBRL = effectiveAporte * Math.pow(1 + retireSettings.aporteGrowth / 100, y - 1);
+        const btcBought = monthlyBRL * 12 / (btcPrice * usdBrl);
+        cumBTC += btcBought;
+        const portfolioBRL = cumBTC * btcPrice * usdBrl;
+        const realBRL = portfolioBRL / Math.pow(1 + retireSettings.ipca / 100, y);
+        const profitBRL = Math.max(0, (btcPrice - avgCostUSD) * usdBrl) * cumBTC;
+        const taxBRL = profitBRL * 0.15;
+        const netBRL = portfolioBRL - taxBRL;
+        rows.push({ year: baseYear + y, btcPrice, usdBrl, monthlyBRL, btcBought, cumBTC, portfolioBRL, realBRL, taxBRL, netBRL, cagr: getYearCagr(y) * 100 });
+        pricePrev = btcPrice;
+      }
+      return rows;
+    })();
+
+    const final = simRows[simRows.length - 1];
+    const wBRL = retireSettings.withdrawalMonthlyBrl;
+    const profitFrac = final ? Math.max(0, (final.btcPrice - avgCostUSD)) * final.usdBrl / (final.btcPrice * final.usdBrl) : 0;
+    const irOnWithdrawal = wBRL > 35000 ? wBRL * profitFrac * 0.15 : 0;
+    const yearsOfIncome = final ? Math.round(final.portfolioBRL / (wBRL * 12)) : 0;
+    const yearsOfIncomeNet = final ? Math.round(final.portfolioBRL / ((wBRL + irOnWithdrawal) * 12)) : 0;
+
+    const onTrackLabel = existingBTC >= retireSettings.targetBtc ? 'Meta já atingida! 🏆'
+      : onTrackPct >= 100 ? 'No trilho!'
+      : onTrackPct >= 75 ? 'Quase lá'
+      : onTrackPct >= 50 ? 'Atenção'
+      : 'Abaixo da meta';
+    const onTrackColor = onTrackPct >= 100 ? '#34C759' : onTrackPct >= 75 ? '#FFD60A' : onTrackPct >= 50 ? '#FF9500' : '#FF3B30';
+    const onTrackEmoji = onTrackPct >= 100 ? '✅' : onTrackPct >= 75 ? '🟡' : onTrackPct >= 50 ? '🟠' : '🔴';
+    const chartRows = simRows.filter((_, i) => i % Math.max(1, Math.floor(simRows.length / 12)) === 0 || i === simRows.length - 1);
+    const maxPortfolio = Math.max(...simRows.map(r => r.portfolioBRL));
+    const BAR_H_R = 100;
+
+    const numInput = (label: string, key: keyof RetireSettings, suffix: string, hint?: string) => (
+      <View style={styles.retireInputRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.retireInputLabel}>{label}</Text>
+          {hint && <Text style={styles.retireInputHint}>{hint}</Text>}
+        </View>
+        <View style={styles.retireInputWrap}>
+          <TextInput
+            style={styles.retireInput}
+            value={String(retireSettings[key])}
+            onChangeText={t => { const n = parseFloat(t.replace(',', '.')); if (!isNaN(n) && n >= 0) updateRetireSetting(key, n as any); }}
+            keyboardType="decimal-pad"
+            selectTextOnFocus
+          />
+          <Text style={styles.retireInputSuffix}>{suffix}</Text>
+        </View>
+      </View>
+    );
+
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.retireHeader}>
+          <TouchableOpacity onPress={() => setScreen('more')}>
+            <Text style={styles.retireHeaderBack}>‹</Text>
+          </TouchableOpacity>
+          <Text style={styles.retireHeaderTitle}>🎯 Simulador de Aposentadoria</Text>
+          <View style={{ width: 32 }} />
+        </View>
+
+        <ScrollView style={styles.content}>
+
+          {/* ON-TRACK INDICATOR */}
+          <View style={[styles.retireTrackCard, { borderColor: onTrackColor }]}>
+            <View style={styles.retireTrackTop}>
+              <Text style={styles.retireTrackEmoji}>{onTrackEmoji}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.retireTrackLabel, { color: onTrackColor }]}>{onTrackLabel}</Text>
+                <Text style={styles.retireTrackSub}>{hideValues ? '****' : existingBTC.toFixed(6)} BTC de {retireSettings.targetBtc} BTC em {retireSettings.targetYears} anos</Text>
+              </View>
+              <Text style={[styles.retireTrackPct, { color: onTrackColor }]}>{Math.min(200, onTrackPct).toFixed(0)}%</Text>
+            </View>
+            <View style={styles.retireTrackBarBg}>
+              <View style={[styles.retireTrackBarFill, { width: `${Math.min(100, onTrackPct)}%`, backgroundColor: onTrackColor }]} />
+            </View>
+            <View style={styles.retireTrackStats}>
+              <Text style={styles.retireTrackStatText}>⚡ Acum. médio: <Text style={{ fontWeight: '700' }}>{hideValues ? '****' : (actualMonthlyBTC * 1000000).toFixed(1)} sats/mês</Text></Text>
+              <Text style={styles.retireTrackStatText}>🎯 Necessário: <Text style={{ fontWeight: '700' }}>{(requiredMonthlyBTC * 1000000).toFixed(1)} sats/mês</Text></Text>
+            </View>
+          </View>
+
+          {/* CONFIGURAÇÕES */}
+          <TouchableOpacity style={styles.retireConfigHeader} onPress={() => setShowRetireConfig(!showRetireConfig)} activeOpacity={0.8}>
+            <Text style={styles.retireConfigHeaderText}>⚙️ Configurações da Simulação</Text>
+            <Text style={styles.retireConfigHeaderChevron}>{showRetireConfig ? '⌃' : '⌄'}</Text>
+          </TouchableOpacity>
+
+          {showRetireConfig && (
+            <View style={styles.retireConfigCard}>
+              <Text style={styles.retireConfigSection}>Objetivo</Text>
+              {numInput('🎯 Meta de BTC', 'targetBtc', 'BTC', 'Quanto BTC quer ter no total')}
+              {numInput('📅 Prazo', 'targetYears', 'anos', 'Anos até a aposentadoria')}
+
+              <Text style={styles.retireConfigSection}>Bitcoin</Text>
+              {numInput('📈 CAGR do BTC', 'btcCagr', '% a.a.', 'Histórico: ~100%; conservador: 30%')}
+              <View style={styles.retireInputRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.retireInputLabel}>CAGR decrescente por halving</Text>
+                  <Text style={styles.retireInputHint}>Mais realista para prazos longos</Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.retireToggle, retireSettings.useDecreasingCagr && styles.retireToggleOn]}
+                  onPress={() => updateRetireSetting('useDecreasingCagr', !retireSettings.useDecreasingCagr)}
+                >
+                  <Text style={styles.retireToggleText}>{retireSettings.useDecreasingCagr ? 'ON' : 'OFF'}</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.retireConfigSection}>Aportes</Text>
+              {numInput('💰 Aporte mensal', 'aporteMensal', 'R$', effectiveAporte > 0 ? `Auto: R$ ${autoAporteBRL.toFixed(0)} — 0 = usar auto` : 'Valor médio mensal em BRL')}
+              {numInput('📈 Cres. do aporte', 'aporteGrowth', '% a.a.', 'Quanto aumentará o aporte por ano')}
+
+              <Text style={styles.retireConfigSection}>Macro</Text>
+              {numInput('💵 CAGR USD/BRL', 'usdBrlCagr', '% a.a.', 'Desvalorização histórica: ~7% a.a.')}
+              {numInput('🔥 IPCA', 'ipca', '% a.a.', 'Inflação brasileira (IPCA hist: 4,5%)')}
+
+              <Text style={styles.retireConfigSection}>Simulação de Renda</Text>
+              {numInput('🏠 Renda mensal desejada', 'withdrawalMonthlyBrl', 'R$/mês', 'Quanto quer sacar por mês na aposentadoria')}
+            </View>
+          )}
+
+          {/* RESULTADO FINAL */}
+          {final && (
+            <View style={styles.retireResultCard}>
+              <Text style={styles.retireResultTitle}>Resultado em {retireSettings.targetYears} anos ({final.year})</Text>
+              <View style={styles.retireResultGrid}>
+                <View style={styles.retireResultItem}>
+                  <Text style={styles.retireResultLabel}>Total BTC</Text>
+                  <Text style={[styles.retireResultValue, { color: '#F7931A' }]}>{hideValues ? '****' : final.cumBTC.toFixed(4)}</Text>
+                  <Text style={styles.retireResultSub}>BTC</Text>
+                </View>
+                <View style={styles.retireResultItem}>
+                  <Text style={styles.retireResultLabel}>Patrimônio Bruto</Text>
+                  <Text style={styles.retireResultValue}>{hideValues ? '****' : final.portfolioBRL >= 1e9 ? `R$ ${(final.portfolioBRL / 1e9).toFixed(2)} bi` : `R$ ${(final.portfolioBRL / 1e6).toFixed(1)} mi`}</Text>
+                  <Text style={styles.retireResultSub}>nominal</Text>
+                </View>
+                <View style={styles.retireResultItem}>
+                  <Text style={styles.retireResultLabel}>Valor Real</Text>
+                  <Text style={[styles.retireResultValue, { color: '#667eea' }]}>{hideValues ? '****' : final.realBRL >= 1e9 ? `R$ ${(final.realBRL / 1e9).toFixed(2)} bi` : `R$ ${(final.realBRL / 1e6).toFixed(1)} mi`}</Text>
+                  <Text style={styles.retireResultSub}>desc. inflação</Text>
+                </View>
+                <View style={styles.retireResultItem}>
+                  <Text style={styles.retireResultLabel}>Líquido (c/ IR)</Text>
+                  <Text style={[styles.retireResultValue, { color: '#34C759' }]}>{hideValues ? '****' : final.netBRL >= 1e9 ? `R$ ${(final.netBRL / 1e9).toFixed(2)} bi` : `R$ ${(final.netBRL / 1e6).toFixed(1)} mi`}</Text>
+                  <Text style={styles.retireResultSub}>após 15% IR</Text>
+                </View>
+              </View>
+              <View style={styles.retireBtcPrice}>
+                <Text style={styles.retireBtcPriceLabel}>Preço projetado do BTC em {final.year}:</Text>
+                <Text style={styles.retireBtcPriceValue}>{formatCurrency(final.btcPrice)}</Text>
+              </View>
+            </View>
+          )}
+
+          {/* GRÁFICO DE EVOLUÇÃO */}
+          {simRows.length > 0 && (
+            <View style={styles.chartCard}>
+              <Text style={styles.chartTitle}>📈 Evolução do Patrimônio</Text>
+              <Text style={styles.chartSubtitle}>Valor bruto e real (desc. inflação) em BRL por ano</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={[styles.barChart, { height: BAR_H_R + 60 }]}>
+                  {simRows.map(r => (
+                    <View key={r.year} style={[styles.barItem, { height: BAR_H_R + 60, width: 52 }]}>
+                      <Text style={[styles.barTopLabel, { color: '#667eea', fontSize: 8 }]}>
+                        {r.portfolioBRL >= 1e9 ? `${(r.portfolioBRL / 1e9).toFixed(1)}bi` : `${(r.portfolioBRL / 1e6).toFixed(0)}M`}
+                      </Text>
+                      <View style={{ flex: 1, justifyContent: 'flex-end', gap: 1 }}>
+                        <View style={[styles.barFill, { height: (r.portfolioBRL / maxPortfolio) * BAR_H_R, backgroundColor: '#F7931A', borderTopLeftRadius: 5, borderTopRightRadius: 5 }]} />
+                      </View>
+                      <Text style={styles.barBottomLabel}>{String(r.year).substring(2)}</Text>
+                    </View>
+                  ))}
+                </View>
+              </ScrollView>
+            </View>
+          )}
+
+          {/* TABELA ANUAL */}
+          {simRows.length > 0 && (
+            <View style={styles.chartCard}>
+              <Text style={styles.chartTitle}>📅 Projeção Ano a Ano</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator>
+                <View>
+                  <View style={styles.retireTableHeader}>
+                    {['Ano', 'BTC/mês', 'Total BTC', 'Valor BRL', 'Real (IPCA)', 'Líq. IR'].map(h => (
+                      <Text key={h} style={styles.retireTableHead}>{h}</Text>
+                    ))}
+                  </View>
+                  {simRows.map(r => (
+                    <View key={r.year} style={styles.retireTableRow}>
+                      <Text style={styles.retireTableCell}>{r.year}</Text>
+                      <Text style={styles.retireTableCell}>{(r.btcBought / 12 * 1e6).toFixed(0)} sats</Text>
+                      <Text style={styles.retireTableCell}>{hideValues ? '***' : r.cumBTC.toFixed(4)}</Text>
+                      <Text style={[styles.retireTableCell, { color: '#F7931A' }]}>{hideValues ? '***' : r.portfolioBRL >= 1e6 ? `${(r.portfolioBRL / 1e6).toFixed(1)}M` : `${(r.portfolioBRL / 1000).toFixed(0)}k`}</Text>
+                      <Text style={[styles.retireTableCell, { color: '#667eea' }]}>{hideValues ? '***' : r.realBRL >= 1e6 ? `${(r.realBRL / 1e6).toFixed(1)}M` : `${(r.realBRL / 1000).toFixed(0)}k`}</Text>
+                      <Text style={[styles.retireTableCell, { color: '#34C759' }]}>{hideValues ? '***' : r.netBRL >= 1e6 ? `${(r.netBRL / 1e6).toFixed(1)}M` : `${(r.netBRL / 1000).toFixed(0)}k`}</Text>
+                    </View>
+                  ))}
+                </View>
+              </ScrollView>
+              <Text style={styles.retireTableNote}>* Valores em R$ | IR = 15% s/ lucro na liquidação total</Text>
+            </View>
+          )}
+
+          {/* SIMULADOR DE RENDA */}
+          {final && (
+            <View style={styles.chartCard}>
+              <Text style={styles.chartTitle}>🏠 Simulador de Renda na Aposentadoria</Text>
+              <Text style={styles.chartSubtitle}>Com base no patrimônio em {final.year}</Text>
+              <View style={styles.retireWithdrawGrid}>
+                <View style={styles.retireWithdrawItem}>
+                  <Text style={styles.retireWithdrawLabel}>Renda desejada</Text>
+                  <Text style={styles.retireWithdrawValue}>{hideValues ? 'R$ ****' : formatCurrencyBRL(wBRL)}/mês</Text>
+                </View>
+                <View style={styles.retireWithdrawItem}>
+                  <Text style={styles.retireWithdrawLabel}>0% IR (lat. ≤ R$35k/mês)</Text>
+                  <Text style={[styles.retireWithdrawValue, { color: '#34C759' }]}>{yearsOfIncome} anos de renda</Text>
+                </View>
+                <View style={styles.retireWithdrawItem}>
+                  <Text style={styles.retireWithdrawLabel}>IR estimado (se {'>'} R$35k)</Text>
+                  <Text style={[styles.retireWithdrawValue, { color: '#FF3B30' }]}>{hideValues ? 'R$ ****' : formatCurrencyBRL(irOnWithdrawal)}/mês</Text>
+                </View>
+                <View style={styles.retireWithdrawItem}>
+                  <Text style={styles.retireWithdrawLabel}>Renda líquida real</Text>
+                  <Text style={[styles.retireWithdrawValue, { color: '#667eea' }]}>{hideValues ? 'R$ ****' : formatCurrencyBRL(wBRL - irOnWithdrawal)}/mês</Text>
+                </View>
+              </View>
+              <View style={styles.retireWithdrawBanner}>
+                <Text style={styles.retireWithdrawBannerText}>
+                  💡 Estratégia isenta: sacar até R$ 35.000/mês por bolsa nacional = <Text style={{ fontWeight: '800', color: '#34C759' }}>0% de IR</Text>
+                </Text>
+              </View>
+              <Text style={styles.retireDisclaimer}>⚠️ Simulação educacional. Não é garantia de retorno. Consulte um assessor financeiro.</Text>
+            </View>
+          )}
+
+        </ScrollView>
+        {renderTabBar()}
+      </SafeAreaView>
+    );
+  }
+
   if (screen === 'taxes') {
-    const taxData = calculateTaxReport();
     const currentDate = new Date();
     const currentMonth = currentDate.getMonth() + 1; // 1-12
     const isDeclarationPeriod = currentMonth >= 1 && currentMonth <= 4;
@@ -4245,6 +4576,14 @@ export default function App() {
             <Text style={styles.headerTitle}>⚙️ Mais</Text>
           </View>
           <ScrollView style={styles.content}>
+            <TouchableOpacity style={styles.moreCard} onPress={() => setScreen('retire')} activeOpacity={0.85}>
+              <Text style={styles.moreCardIcon}>🎯</Text>
+              <View style={styles.moreCardText}>
+                <Text style={styles.moreCardTitle}>Simulador de Aposentadoria</Text>
+                <Text style={styles.moreCardDesc}>Projete seu patrimônio em Bitcoin</Text>
+              </View>
+              <Text style={styles.moreCardChevron}>›</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.moreCard} onPress={() => setScreen('taxes')} activeOpacity={0.85}>
               <Text style={styles.moreCardIcon}>💼</Text>
               <View style={styles.moreCardText}>
@@ -7302,6 +7641,264 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#8E8E93',
     fontWeight: '500',
+  },
+  retireHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#1C1C1E',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  retireHeaderBack: {
+    color: '#fff',
+    fontSize: 32,
+    lineHeight: 36,
+    width: 32,
+    textAlign: 'center',
+  },
+  retireHeaderTitle: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '700',
+    flex: 1,
+    textAlign: 'center',
+  },
+  retireTrackCard: {
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 18,
+    marginBottom: 14,
+    borderWidth: 2,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+  },
+  retireTrackTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
+  retireTrackEmoji: { fontSize: 32 },
+  retireTrackLabel: { fontSize: 18, fontWeight: '800' },
+  retireTrackSub: { fontSize: 12, color: '#8E8E93', marginTop: 2 },
+  retireTrackPct: { fontSize: 24, fontWeight: '800' },
+  retireTrackBarBg: {
+    height: 12,
+    backgroundColor: '#F1F3F6',
+    borderRadius: 6,
+    overflow: 'hidden',
+    marginBottom: 12,
+  },
+  retireTrackBarFill: { height: 12, borderRadius: 6 },
+  retireTrackStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  retireTrackStatText: { fontSize: 12, color: '#3C3C43' },
+  retireConfigHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#1C1C1E',
+    borderRadius: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    marginBottom: 6,
+  },
+  retireConfigHeaderText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  retireConfigHeaderChevron: { color: '#8E8E93', fontSize: 20 },
+  retireConfigCard: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#F1F3F6',
+  },
+  retireConfigSection: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#667eea',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginTop: 14,
+    marginBottom: 8,
+  },
+  retireInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F3F6',
+    gap: 12,
+  },
+  retireInputLabel: { fontSize: 14, color: '#1C1C1E', fontWeight: '500' },
+  retireInputHint: { fontSize: 11, color: '#8E8E93', marginTop: 2 },
+  retireInputWrap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  retireInput: {
+    backgroundColor: '#F1F3F6',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1C1C1E',
+    minWidth: 72,
+    textAlign: 'right',
+  },
+  retireInputSuffix: { fontSize: 13, color: '#8E8E93', fontWeight: '500' },
+  retireToggle: {
+    backgroundColor: '#F1F3F6',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+  },
+  retireToggleOn: { backgroundColor: '#667eea' },
+  retireToggleText: { fontSize: 13, fontWeight: '700', color: '#1C1C1E' },
+  retireResultCard: {
+    backgroundColor: '#1C1C1E',
+    borderRadius: 18,
+    padding: 18,
+    marginBottom: 14,
+  },
+  retireResultTitle: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 14,
+    textAlign: 'center',
+  },
+  retireResultGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 14,
+  },
+  retireResultItem: {
+    flex: 1,
+    minWidth: '45%',
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+  },
+  retireResultLabel: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  retireResultValue: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  retireResultSub: {
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: 10,
+    marginTop: 2,
+  },
+  retireBtcPrice: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(247,147,26,0.15)',
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(247,147,26,0.3)',
+  },
+  retireBtcPriceLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 13 },
+  retireBtcPriceValue: { color: '#F7931A', fontSize: 14, fontWeight: '800' },
+  retireTableHeader: {
+    flexDirection: 'row',
+    backgroundColor: '#F1F3F6',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    marginBottom: 4,
+  },
+  retireTableHead: {
+    width: 84,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#8E8E93',
+    textTransform: 'uppercase',
+    textAlign: 'center',
+  },
+  retireTableRow: {
+    flexDirection: 'row',
+    paddingVertical: 7,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F3F6',
+  },
+  retireTableCell: {
+    width: 84,
+    fontSize: 12,
+    color: '#1C1C1E',
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  retireTableNote: {
+    fontSize: 11,
+    color: '#8E8E93',
+    textAlign: 'center',
+    marginTop: 10,
+    fontStyle: 'italic',
+  },
+  retireWithdrawGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 14,
+  },
+  retireWithdrawItem: {
+    flex: 1,
+    minWidth: '45%',
+    backgroundColor: '#F8F9FD',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#F1F3F6',
+  },
+  retireWithdrawLabel: {
+    fontSize: 11,
+    color: '#8E8E93',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+    marginBottom: 6,
+  },
+  retireWithdrawValue: {
+    fontSize: 15,
+    color: '#1C1C1E',
+    fontWeight: '700',
+  },
+  retireWithdrawBanner: {
+    backgroundColor: 'rgba(52,199,89,0.1)',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(52,199,89,0.25)',
+    marginBottom: 12,
+  },
+  retireWithdrawBannerText: {
+    fontSize: 13,
+    color: '#3C3C43',
+    lineHeight: 19,
+  },
+  retireDisclaimer: {
+    fontSize: 11,
+    color: '#8E8E93',
+    textAlign: 'center',
+    fontStyle: 'italic',
+    lineHeight: 16,
   },
   btcChartsHeader: {
     backgroundColor: '#F7931A',
