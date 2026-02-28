@@ -81,6 +81,14 @@ const DEFAULT_RETIRE_SETTINGS: RetireSettings = {
   withdrawalMonthlyBrl: 10000,
 };
 
+type RetireScenario = 'pessimista' | 'base' | 'otimista' | 'custom';
+
+const SCENARIO_PRESETS: Record<Exclude<RetireScenario, 'custom'>, Partial<RetireSettings>> = {
+  pessimista: { btcCagr: 20, useDecreasingCagr: true,  usdBrlCagr: 4, aporteGrowth: 0, ipca: 7   },
+  base:       { btcCagr: 40, useDecreasingCagr: true,  usdBrlCagr: 5, aporteGrowth: 3, ipca: 6   },
+  otimista:   { btcCagr: 60, useDecreasingCagr: false, usdBrlCagr: 8, aporteGrowth: 5, ipca: 4.5 },
+};
+
 const COINGECKO_IDS: {[key: string]: string} = {
   'BTC': 'bitcoin', 'ETH': 'ethereum', 'SOL': 'solana', 'BNB': 'binancecoin',
   'XRP': 'ripple', 'ADA': 'cardano', 'DOGE': 'dogecoin', 'DOT': 'polkadot',
@@ -230,6 +238,7 @@ export default function App() {
   const [currentPrices, setCurrentPrices] = useState<{[coin: string]: number}>({});
   const [retireSettings, setRetireSettings] = useState<RetireSettings>(DEFAULT_RETIRE_SETTINGS);
   const [showRetireConfig, setShowRetireConfig] = useState(false);
+  const [retireScenario, setRetireScenario] = useState<RetireScenario>('custom');
 
   useEffect(() => {
     checkBiometricSupport();
@@ -501,11 +510,20 @@ export default function App() {
   };
 
   const updateRetireSetting = async <K extends keyof RetireSettings>(key: K, value: RetireSettings[K]) => {
+    setRetireScenario('custom');
     setRetireSettings(prev => {
       const next = { ...prev, [key]: value };
       AsyncStorage.setItem(RETIRE_SETTINGS_KEY, JSON.stringify(next));
       return next;
     });
+  };
+
+  const applyScenario = (scenario: Exclude<RetireScenario, 'custom'>) => {
+    const preset = SCENARIO_PRESETS[scenario];
+    const next = { ...retireSettings, ...preset };
+    setRetireSettings(next);
+    setRetireScenario(scenario);
+    AsyncStorage.setItem(RETIRE_SETTINGS_KEY, JSON.stringify(next));
   };
 
   // Calculadora de Imposto Pré-Venda
@@ -3232,6 +3250,37 @@ export default function App() {
             </View>
           </View>
 
+          {/* SELETOR DE CENÁRIO */}
+          <View style={styles.retireScenarioRow}>
+            {(['pessimista', 'base', 'otimista', 'custom'] as RetireScenario[]).map(sc => {
+              const labels: Record<RetireScenario, string> = {
+                pessimista: '🔴 Pessimista',
+                base:       '🟡 Base',
+                otimista:   '🟢 Otimista',
+                custom:     '⚙️ Custom',
+              };
+              const colors: Record<RetireScenario, string> = {
+                pessimista: '#FF3B30',
+                base:       '#FF9500',
+                otimista:   '#34C759',
+                custom:     '#667eea',
+              };
+              const active = retireScenario === sc;
+              return (
+                <TouchableOpacity
+                  key={sc}
+                  style={[styles.retireScenarioBtn, active && { backgroundColor: colors[sc], borderColor: colors[sc] }]}
+                  onPress={() => { if (sc !== 'custom') applyScenario(sc as any); else setShowRetireConfig(true); }}
+                  activeOpacity={0.75}
+                >
+                  <Text style={[styles.retireScenarioBtnText, active && { color: '#fff' }]}>
+                    {labels[sc]}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
           {/* CONFIGURAÇÕES */}
           <TouchableOpacity style={styles.retireConfigHeader} onPress={() => setShowRetireConfig(!showRetireConfig)} activeOpacity={0.8}>
             <Text style={styles.retireConfigHeaderText}>⚙️ Configurações da Simulação</Text>
@@ -3397,6 +3446,7 @@ export default function App() {
     const currentDate = new Date();
     const currentMonth = currentDate.getMonth() + 1; // 1-12
     const isDeclarationPeriod = currentMonth >= 1 && currentMonth <= 4;
+    const taxData = calculateTaxReport();
     
     const allClear = taxData.pendingDARFs.length === 0 && (!taxData.needsDeclaration || !isDeclarationPeriod);
 
@@ -7899,6 +7949,30 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontStyle: 'italic',
     lineHeight: 16,
+  },
+  retireScenarioRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 14,
+    flexWrap: 'wrap',
+  },
+  retireScenarioBtn: {
+    flex: 1,
+    minWidth: '20%',
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#E5E5EA',
+    paddingVertical: 9,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  retireScenarioBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#3C3C43',
+    textAlign: 'center',
   },
   btcChartsHeader: {
     backgroundColor: '#F7931A',
