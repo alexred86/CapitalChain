@@ -3157,7 +3157,12 @@ export default function App() {
     })();
     const actualMonthlyBTC = monthsSinceFirst > 0 ? existingBTC / monthsSinceFirst : 0;
     const btcNeeded = Math.max(0, retireSettings.targetBtc - existingBTC);
-    const requiredMonthlyBTC = retireSettings.targetYears > 0 ? btcNeeded / (retireSettings.targetYears * 12) : 0;
+    // Anos restantes do plano (de hoje até o fim), não o prazo total
+    const planYear = retireSettings.planStartYear > 0
+      ? retireSettings.planStartYear
+      : (btcPurchases.length > 0 ? new Date(btcPurchases[0].date).getFullYear() : new Date().getFullYear());
+    const remainingYears = Math.max(1, planYear + retireSettings.targetYears - new Date().getFullYear());
+    const requiredMonthlyBTC = remainingYears > 0 ? btcNeeded / (remainingYears * 12) : 0;
     const onTrackPct = existingBTC >= retireSettings.targetBtc ? 200
       : requiredMonthlyBTC > 0 ? Math.min(200, (actualMonthlyBTC / requiredMonthlyBTC) * 100) : 0;
 
@@ -3326,7 +3331,11 @@ export default function App() {
     })();
     const buildHistoricalRows = () => {
       const histRows: any[] = [];
-      let cumBTChist = 0;
+      // BTC comprado antes do planStartYear já entra no existingBTC — precisa refletir no cumulativo
+      const prePlanBTC = btcPurchases
+        .filter(p => new Date(p.date).getFullYear() < histStartYear)
+        .reduce((s, p) => s + p.quantity, 0);
+      let cumBTChist = prePlanBTC;
       for (let yr = histStartYear; yr < currentYear; yr++) {
         const yp = btcPurchases.filter(p => new Date(p.date).getFullYear() === yr);
         const btcBought = yp.reduce((s, p) => s + p.quantity, 0);
@@ -3357,9 +3366,11 @@ export default function App() {
     // Usa custo médio acumulado ao final da simulação (inclui todos os aportes futuros)
     const finalAvgCostUSD = final ? final.avgCost : avgCostUSD;
     const profitFrac = final ? Math.max(0, (final.btcPrice - finalAvgCostUSD)) * final.usdBrl / (final.btcPrice * final.usdBrl) : 0;
-    const irOnWithdrawal = wBRL > 35000 ? wBRL * profitFrac * 0.15 : 0;
-    const yearsOfIncome = final ? Math.round(final.portfolioBRL / (wBRL * 12)) : 0;
-    const yearsOfIncomeNet = final ? Math.round(final.portfolioBRL / ((wBRL + irOnWithdrawal) * 12)) : 0;
+    // wBRL está em reais de HOJE — inflaciona para reais nominais do ano de aposentadoria
+    const wBRL_futuro = final ? wBRL * Math.pow(1 + retireSettings.ipca / 100, retireSettings.targetYears) : wBRL;
+    const irOnWithdrawal = wBRL_futuro > 35000 ? wBRL_futuro * profitFrac * 0.15 : 0;
+    const yearsOfIncome = final ? Math.round(final.portfolioBRL / (wBRL_futuro * 12)) : 0;
+    const yearsOfIncomeNet = final ? Math.round(final.portfolioBRL / ((wBRL_futuro + irOnWithdrawal) * 12)) : 0;
 
     const onTrackLabel = existingBTC >= retireSettings.targetBtc ? 'Meta já atingida! 🏆'
       : onTrackPct >= 100 ? 'No trilho!'
@@ -3701,20 +3712,20 @@ export default function App() {
               <Text style={styles.chartSubtitle}>Com base no patrimônio em {final.year}</Text>
               <View style={styles.retireWithdrawGrid}>
                 <View style={styles.retireWithdrawItem}>
-                  <Text style={styles.retireWithdrawLabel}>Renda desejada</Text>
+                  <Text style={styles.retireWithdrawLabel}>Renda desejada hoje</Text>
                   <Text style={styles.retireWithdrawValue}>{hideValues ? 'R$ ****' : formatCurrencyBRL(wBRL)}/mês</Text>
                 </View>
                 <View style={styles.retireWithdrawItem}>
-                  <Text style={styles.retireWithdrawLabel}>{wBRL > 35000 ? 'Anos de renda (c/ IR)' : 'Anos de renda (IR isento)'}</Text>
-                  <Text style={[styles.retireWithdrawValue, { color: '#34C759' }]}>{wBRL > 35000 ? yearsOfIncomeNet : yearsOfIncome} anos</Text>
+                  <Text style={styles.retireWithdrawLabel}>Equivalente em {final.year} (IPCA)</Text>
+                  <Text style={[styles.retireWithdrawValue, { color: '#FF9500' }]}>{hideValues ? 'R$ ****' : formatCurrencyBRL(Math.round(wBRL_futuro))}/mês</Text>
                 </View>
                 <View style={styles.retireWithdrawItem}>
-                  <Text style={styles.retireWithdrawLabel}>IR estimado (se {'>'} R$35k)</Text>
-                  <Text style={[styles.retireWithdrawValue, { color: '#FF3B30' }]}>{hideValues ? 'R$ ****' : formatCurrencyBRL(irOnWithdrawal)}/mês</Text>
+                  <Text style={styles.retireWithdrawLabel}>{wBRL_futuro > 35000 ? 'Anos de renda (c/ IR)' : 'Anos de renda (IR isento)'}</Text>
+                  <Text style={[styles.retireWithdrawValue, { color: '#34C759' }]}>{wBRL_futuro > 35000 ? yearsOfIncomeNet : yearsOfIncome} anos</Text>
                 </View>
                 <View style={styles.retireWithdrawItem}>
-                  <Text style={styles.retireWithdrawLabel}>Renda líquida real</Text>
-                  <Text style={[styles.retireWithdrawValue, { color: '#667eea' }]}>{hideValues ? 'R$ ****' : formatCurrencyBRL(wBRL - irOnWithdrawal)}/mês</Text>
+                  <Text style={styles.retireWithdrawLabel}>IR estimado em {final.year} (se {'>'} R$35k)</Text>
+                  <Text style={[styles.retireWithdrawValue, { color: '#FF3B30' }]}>{hideValues ? 'R$ ****' : formatCurrencyBRL(Math.round(irOnWithdrawal))}/mês</Text>
                 </View>
               </View>
               <View style={styles.retireWithdrawBanner}>
