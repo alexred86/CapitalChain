@@ -3314,7 +3314,9 @@ export default function App() {
 
     const final = simRows[simRows.length - 1];
     const wBRL = retireSettings.withdrawalMonthlyBrl;
-    const profitFrac = final ? Math.max(0, (final.btcPrice - avgCostUSD)) * final.usdBrl / (final.btcPrice * final.usdBrl) : 0;
+    // Usa custo médio acumulado ao final da simulação (inclui todos os aportes futuros)
+    const finalAvgCostUSD = final ? final.avgCost : avgCostUSD;
+    const profitFrac = final ? Math.max(0, (final.btcPrice - finalAvgCostUSD)) * final.usdBrl / (final.btcPrice * final.usdBrl) : 0;
     const irOnWithdrawal = wBRL > 35000 ? wBRL * profitFrac * 0.15 : 0;
     const yearsOfIncome = final ? Math.round(final.portfolioBRL / (wBRL * 12)) : 0;
     const yearsOfIncomeNet = final ? Math.round(final.portfolioBRL / ((wBRL + irOnWithdrawal) * 12)) : 0;
@@ -3326,7 +3328,9 @@ export default function App() {
       : 'Abaixo da meta';
     const onTrackColor = onTrackPct >= 100 ? '#34C759' : onTrackPct >= 75 ? '#FFD60A' : onTrackPct >= 50 ? '#FF9500' : '#FF3B30';
     const onTrackEmoji = onTrackPct >= 100 ? '✅' : onTrackPct >= 75 ? '🟡' : onTrackPct >= 50 ? '🟠' : '🔴';
-    const chartRows = simRows.filter((_, i) => i % Math.max(1, Math.floor(simRows.length / 12)) === 0 || i === simRows.length - 1);
+    // Sempre inclui índice 0 (ano parcial) + amostra distribuída + último
+    const chartStep = Math.max(1, Math.floor(simRows.length / 12));
+    const chartRows = simRows.filter((_, i) => i === 0 || i % chartStep === 0 || i === simRows.length - 1);
     const maxPortfolio = Math.max(...simRows.map(r => r.portfolioBRL));
     const BAR_H_R = 100;
 
@@ -3632,8 +3636,8 @@ export default function App() {
                   <Text style={styles.retireWithdrawValue}>{hideValues ? 'R$ ****' : formatCurrencyBRL(wBRL)}/mês</Text>
                 </View>
                 <View style={styles.retireWithdrawItem}>
-                  <Text style={styles.retireWithdrawLabel}>0% IR (lat. ≤ R$35k/mês)</Text>
-                  <Text style={[styles.retireWithdrawValue, { color: '#34C759' }]}>{yearsOfIncome} anos de renda</Text>
+                  <Text style={styles.retireWithdrawLabel}>{wBRL > 35000 ? 'Anos de renda (c/ IR)' : 'Anos de renda (IR isento)'}</Text>
+                  <Text style={[styles.retireWithdrawValue, { color: '#34C759' }]}>{wBRL > 35000 ? yearsOfIncomeNet : yearsOfIncome} anos</Text>
                 </View>
                 <View style={styles.retireWithdrawItem}>
                   <Text style={styles.retireWithdrawLabel}>IR estimado (se {'>'} R$35k)</Text>
