@@ -3565,7 +3565,7 @@ export default function App() {
               <ScrollView horizontal showsHorizontalScrollIndicator>
                 <View>
                   <View style={styles.retireTableHeader}>
-                    {['Ano', 'BTC/mês', 'Total BTC', 'Valor BRL', 'Real (IPCA)', 'Líq. IR'].map(h => (
+                    {['Ano', 'Preço BTC', 'BTC/mês', 'Total BTC', 'Valor BRL', 'Real (IPCA)', 'Líq. IR'].map(h => (
                       <Text key={h} style={styles.retireTableHead}>{h}</Text>
                     ))}
                   </View>
@@ -3573,6 +3573,9 @@ export default function App() {
                     <View key={r.year} style={[styles.retireTableRow, r.isBear && { backgroundColor: 'rgba(255,59,48,0.06)' }, r.isRecovery && { backgroundColor: 'rgba(255,149,0,0.06)' }]}>
                       <Text style={[styles.retireTableCell, { fontWeight: r.isBear ? '800' : '500' }]}>
                         {r.isBear ? '📉' : r.isRecovery ? '🟠' : ''}{r.year}
+                      </Text>
+                      <Text style={[styles.retireTableCell, { color: r.isBear ? '#FF3B30' : r.isRecovery ? '#FF9500' : '#F7931A' }]}>
+                        {r.btcPrice >= 1e6 ? `$${(r.btcPrice / 1e6).toFixed(2)}M` : r.btcPrice >= 1e3 ? `$${(r.btcPrice / 1e3).toFixed(0)}k` : `$${r.btcPrice.toFixed(0)}`}
                       </Text>
                       <Text style={styles.retireTableCell}>{(r.btcBought / 12 * 1e6).toFixed(0)} sats</Text>
                       <Text style={styles.retireTableCell}>{hideValues ? '***' : r.cumBTC.toFixed(4)}</Text>
