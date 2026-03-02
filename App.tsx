@@ -3169,6 +3169,8 @@ export default function App() {
     };
 
     const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth() + 1; // 1=jan
+    const monthsRemainingThisYear = 12 - currentMonth; // meses completos após o mês atual
     const bsy = retireSettings.bearStartYear;
     // crashNow = bear iniciou no ano atual (preço de entrada já crashado)
     const crashNow = retireSettings.bearMarkets > 0 && bsy > 0 && bsy <= currentYear;
@@ -3233,6 +3235,35 @@ export default function App() {
       let inRecovery = withBears && crashNow ? retireSettings.bearRecoveryYears : 0;
       let crashPrice = withBears && crashNow ? simStartPrice : 0;
       let recoveryEndPrice = withBears && crashNow ? crashNowRecoveryTarget : 0;
+
+      // Ano parcial: meses completos restantes do ano atual
+      if (monthsRemainingThisYear > 0) {
+        const btcBoughtPartial = effectiveAporte * monthsRemainingThisYear / (pricePrev * dollarRateNow);
+        totalCostUSD += btcBoughtPartial * pricePrev;
+        cumBTC += btcBoughtPartial;
+        const runningAvgCostPartial = cumBTC > 0 ? totalCostUSD / cumBTC : 0;
+        const portfolioBRLPartial = cumBTC * pricePrev * dollarRateNow;
+        const profitBRLPartial = Math.max(0, (pricePrev - runningAvgCostPartial) * dollarRateNow) * cumBTC;
+        const taxBRLPartial = profitBRLPartial * 0.15;
+        rows.push({
+          year: currentYear,
+          btcPrice: pricePrev,
+          usdBrl: dollarRateNow,
+          monthlyBRL: effectiveAporte,
+          btcBought: btcBoughtPartial,
+          cumBTC,
+          portfolioBRL: portfolioBRLPartial,
+          realBRL: portfolioBRLPartial, // y=0: sem desconto IPCA
+          taxBRL: taxBRLPartial,
+          netBRL: portfolioBRLPartial - taxBRLPartial,
+          cagr: 0,
+          avgCost: runningAvgCostPartial,
+          isBear: withBears && crashNow,
+          isRecovery: false,
+          isPartialYear: true,
+        });
+        // pricePrev não muda: 2026 termina ao preço atual
+      }
 
       for (let y = 1; y <= retireSettings.targetYears; y++) {
         const cagr = getYearCagr(y);
@@ -3572,7 +3603,7 @@ export default function App() {
                   {simRows.map(r => (
                     <View key={r.year} style={[styles.retireTableRow, r.isBear && { backgroundColor: 'rgba(255,59,48,0.06)' }, r.isRecovery && { backgroundColor: 'rgba(255,149,0,0.06)' }]}>
                       <Text style={[styles.retireTableCell, { fontWeight: r.isBear ? '800' : '500' }]}>
-                        {r.isBear ? '📉' : r.isRecovery ? '🟠' : ''}{r.year}
+                        {r.isBear ? '📉' : r.isRecovery ? '🟠' : ''}{r.year}{r.isPartialYear ? '*' : ''}
                       </Text>
                       <Text style={[styles.retireTableCell, { color: r.isBear ? '#FF3B30' : r.isRecovery ? '#FF9500' : '#F7931A' }]}>
                         {r.btcPrice >= 1e6 ? `$${(r.btcPrice / 1e6).toFixed(2)}M` : r.btcPrice >= 1e3 ? `$${(r.btcPrice / 1e3).toFixed(0)}k` : `$${r.btcPrice.toFixed(0)}`}
@@ -3586,7 +3617,7 @@ export default function App() {
                   ))}
                 </View>
               </ScrollView>
-              <Text style={styles.retireTableNote}>📉 crash • 🟠 recuperação • IR = 15% s/ lucro | valores em R$</Text>
+              <Text style={styles.retireTableNote}>📉 crash • 🟠 recuperação • IR = 15% s/ lucro | * ano parcial ({monthsRemainingThisYear} meses) | valores em R$</Text>
             </View>
           )}
 
