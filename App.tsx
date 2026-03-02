@@ -3189,33 +3189,37 @@ export default function App() {
 
     // Calcula os anos-simulação dos crashes (y=1 → 2027, etc.)
     const bearYearSet = new Set<number>();
-    // spacing mínimo = bearRecoveryYears + 1 para evitar sobreposição crash/recuperação
-    const bearSpacing = retireSettings.bearMarkets > 0
-      ? Math.max(retireSettings.bearRecoveryYears + 1, Math.round(retireSettings.targetYears / retireSettings.bearMarkets))
-      : 0;
     if (retireSettings.bearMarkets > 0) {
       if (bsy === 0) {
-        // automático: distribui uniformemente com spacing seguro
+        // automático: distribui uniformemente — N bears em T anos, spacing = T/N
+        const spacing = Math.max(retireSettings.bearRecoveryYears + 1, Math.round(retireSettings.targetYears / retireSettings.bearMarkets));
         for (let k = 1; k <= retireSettings.bearMarkets; k++) {
-          const y = bearSpacing * k;
-          const safeY = Math.max(1, Math.min(retireSettings.targetYears - retireSettings.bearRecoveryYears, y));
+          const y = spacing * k;
+          const safeY = Math.max(1, Math.min(retireSettings.targetYears, y));
           bearYearSet.add(safeY);
         }
       } else if (crashNow) {
-        // crash atual: 1º crash já acontecendo (y=0), próximos a partir de bearSpacing
+        // crash atual em y=0: N-1 crashes adicionais distribuídos de y=spacing até y=T
+        // spacing = T/(N-1) para que o último crash caia no ano final
+        const spacing = retireSettings.bearMarkets > 1
+          ? Math.max(retireSettings.bearRecoveryYears + 1, Math.round(retireSettings.targetYears / (retireSettings.bearMarkets - 1)))
+          : 0;
         for (let k = 1; k < retireSettings.bearMarkets; k++) {
-          const y = bearSpacing * k;
-          if (y <= retireSettings.targetYears - retireSettings.bearRecoveryYears)
+          const y = spacing * k;
+          if (y <= retireSettings.targetYears)
             bearYearSet.add(y);
         }
       } else {
-        // ano futuro específico: distribui a partir do 1º crash com spacing seguro
+        // ano futuro específico: 1º crash em y1, demais distribuídos com spacing = (T-y1)/(N-1)
         const y1 = bsy - currentYear;
-        const safeY1 = Math.max(1, Math.min(retireSettings.targetYears - retireSettings.bearRecoveryYears, y1));
+        const safeY1 = Math.max(1, Math.min(retireSettings.targetYears, y1));
         bearYearSet.add(safeY1);
+        const spacing = retireSettings.bearMarkets > 1
+          ? Math.max(retireSettings.bearRecoveryYears + 1, Math.round((retireSettings.targetYears - safeY1) / (retireSettings.bearMarkets - 1)))
+          : 0;
         for (let k = 1; k < retireSettings.bearMarkets; k++) {
-          const y = safeY1 + bearSpacing * k;
-          if (y <= retireSettings.targetYears - retireSettings.bearRecoveryYears)
+          const y = safeY1 + spacing * k;
+          if (y <= retireSettings.targetYears)
             bearYearSet.add(y);
         }
       }
