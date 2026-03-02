@@ -71,6 +71,7 @@ interface RetireSettings {
   bearDepth: number;         // queda % de cada crash
   bearRecoveryYears: number; // anos para recuperar ao piso anterior
   bearStartYear: number;     // ano calendário do 1º crash (0 = automático)
+  planStartYear: number;     // ano de início do plano (0 = ano da 1ª compra)
 }
 
 const DEFAULT_RETIRE_SETTINGS: RetireSettings = {
@@ -87,14 +88,15 @@ const DEFAULT_RETIRE_SETTINGS: RetireSettings = {
   bearDepth: 75,
   bearRecoveryYears: 2,
   bearStartYear: 0,
+  planStartYear: 0,
 };
 
 type RetireScenario = 'pessimista' | 'base' | 'otimista' | 'custom';
 
 const SCENARIO_PRESETS: Record<Exclude<RetireScenario, 'custom'>, Partial<RetireSettings>> = {
-  pessimista: { btcCagr: 20, useDecreasingCagr: true,  usdBrlCagr: 4, aporteGrowth: 0, ipca: 7,   bearMarkets: 3, bearDepth: 80, bearRecoveryYears: 3, bearStartYear: 0 },
-  base:       { btcCagr: 40, useDecreasingCagr: true,  usdBrlCagr: 5, aporteGrowth: 3, ipca: 6,   bearMarkets: 2, bearDepth: 75, bearRecoveryYears: 2, bearStartYear: 0 },
-  otimista:   { btcCagr: 60, useDecreasingCagr: false, usdBrlCagr: 8, aporteGrowth: 5, ipca: 4.5, bearMarkets: 1, bearDepth: 70, bearRecoveryYears: 2, bearStartYear: 0 },
+  pessimista: { btcCagr: 20, useDecreasingCagr: true,  usdBrlCagr: 4, aporteGrowth: 0, ipca: 7,   bearMarkets: 3, bearDepth: 80, bearRecoveryYears: 3, bearStartYear: 0, planStartYear: 0 },
+  base:       { btcCagr: 40, useDecreasingCagr: true,  usdBrlCagr: 5, aporteGrowth: 3, ipca: 6,   bearMarkets: 2, bearDepth: 75, bearRecoveryYears: 2, bearStartYear: 0, planStartYear: 0 },
+  otimista:   { btcCagr: 60, useDecreasingCagr: false, usdBrlCagr: 8, aporteGrowth: 5, ipca: 4.5, bearMarkets: 1, bearDepth: 70, bearRecoveryYears: 2, bearStartYear: 0, planStartYear: 0 },
 };
 
 const COINGECKO_IDS: {[key: string]: string} = {
@@ -3316,6 +3318,40 @@ export default function App() {
     const simRows = runSim(true);
     const simRowsNoBear = retireSettings.bearMarkets > 0 ? runSim(false) : simRows;
 
+    // Histórico real: compras agrupadas por ano desde planStartYear
+    const histStartYear = (() => {
+      if (retireSettings.planStartYear > 0) return retireSettings.planStartYear;
+      if (btcPurchases.length > 0) return new Date(btcPurchases[0].date).getFullYear();
+      return currentYear;
+    })();
+    const buildHistoricalRows = () => {
+      const histRows: any[] = [];
+      let cumBTChist = 0;
+      for (let yr = histStartYear; yr < currentYear; yr++) {
+        const yp = btcPurchases.filter(p => new Date(p.date).getFullYear() === yr);
+        const btcBought = yp.reduce((s, p) => s + p.quantity, 0);
+        const investedBRL = yp.reduce((s, p) => s + p.pricePaid * p.dollarRate, 0);
+        const investedUSD = yp.reduce((s, p) => s + p.pricePaid, 0);
+        cumBTChist += btcBought;
+        const avgPriceUSD = btcBought > 0 ? investedUSD / btcBought : 0;
+        histRows.push({
+          year: yr,
+          btcPrice: avgPriceUSD,     // preço médio de aquisição naquele ano
+          btcBought,
+          cumBTC: cumBTChist,
+          investedBRL,
+          portfolioBRL: null,
+          realBRL: null,
+          netBRL: null,
+          isHistorical: true,
+          isEmpty: btcBought === 0,
+        });
+      }
+      return histRows;
+    };
+    const historicalRows = histStartYear < currentYear ? buildHistoricalRows() : [];
+    const allTableRows = [...historicalRows, ...simRows];
+
     const final = simRows[simRows.length - 1];
     const wBRL = retireSettings.withdrawalMonthlyBrl;
     // Usa custo médio acumulado ao final da simulação (inclui todos os aportes futuros)
@@ -3438,6 +3474,7 @@ export default function App() {
           {showRetireConfig && (
             <View style={styles.retireConfigCard}>
               <Text style={styles.retireConfigSection}>Objetivo</Text>
+              {numInput('📅 Início do plano', 'planStartYear', '', `0 = ano da 1ª compra | ex: ${new Date().getFullYear() - 2} = 2 anos atrás`)}
               {numInput('🎯 Meta de BTC', 'targetBtc', 'BTC', 'Quanto BTC quer ter no total')}
               {numInput('📅 Prazo', 'targetYears', 'anos', 'Anos até a aposentadoria')}
 
@@ -3598,34 +3635,62 @@ export default function App() {
           )}
 
           {/* TABELA ANUAL */}
-          {simRows.length > 0 && (
+          {allTableRows.length > 0 && (
             <View style={styles.chartCard}>
-              <Text style={styles.chartTitle}>📅 Projeção Ano a Ano</Text>
+              <Text style={styles.chartTitle}>📅 Histórico + Projeção Ano a Ano</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator>
                 <View>
                   <View style={styles.retireTableHeader}>
-                    {['Ano', 'Preço BTC', 'BTC/mês', 'Total BTC', 'Valor BRL', 'Real (IPCA)', 'Líq. IR'].map(h => (
+                    {['Ano', 'Preço BTC', 'BTC comprado', 'Total BTC', 'Valor BRL', 'Real (IPCA)', 'Líq. IR'].map(h => (
                       <Text key={h} style={styles.retireTableHead}>{h}</Text>
                     ))}
                   </View>
-                  {simRows.map(r => (
-                    <View key={r.year} style={[styles.retireTableRow, r.isBear && { backgroundColor: 'rgba(255,59,48,0.06)' }, r.isRecovery && { backgroundColor: 'rgba(255,149,0,0.06)' }]}>
-                      <Text style={[styles.retireTableCell, { fontWeight: r.isBear ? '800' : '500' }]}>
-                        {r.isBear ? '📉' : r.isRecovery ? '🟠' : ''}{r.year}{r.isPartialYear ? '*' : ''}
-                      </Text>
-                      <Text style={[styles.retireTableCell, { color: r.isBear ? '#FF3B30' : r.isRecovery ? '#FF9500' : '#F7931A' }]}>
-                        {r.btcPrice >= 1e6 ? `$${(r.btcPrice / 1e6).toFixed(2)}M` : r.btcPrice >= 1e3 ? `$${(r.btcPrice / 1e3).toFixed(0)}k` : `$${r.btcPrice.toFixed(0)}`}
-                      </Text>
-                      <Text style={styles.retireTableCell}>{(r.btcBought / 12 * 1e6).toFixed(0)} sats</Text>
-                      <Text style={styles.retireTableCell}>{hideValues ? '***' : r.cumBTC.toFixed(4)}</Text>
-                      <Text style={[styles.retireTableCell, { color: r.isBear ? '#FF3B30' : '#F7931A' }]}>{hideValues ? '***' : r.portfolioBRL >= 1e6 ? `${(r.portfolioBRL / 1e6).toFixed(1)}M` : `${(r.portfolioBRL / 1000).toFixed(0)}k`}</Text>
-                      <Text style={[styles.retireTableCell, { color: '#667eea' }]}>{hideValues ? '***' : r.realBRL >= 1e6 ? `${(r.realBRL / 1e6).toFixed(1)}M` : `${(r.realBRL / 1000).toFixed(0)}k`}</Text>
-                      <Text style={[styles.retireTableCell, { color: '#34C759' }]}>{hideValues ? '***' : r.netBRL >= 1e6 ? `${(r.netBRL / 1e6).toFixed(1)}M` : `${(r.netBRL / 1000).toFixed(0)}k`}</Text>
-                    </View>
-                  ))}
+                  {allTableRows.map(r => {
+                    const isHist = r.isHistorical;
+                    return (
+                      <View key={r.year} style={[
+                        styles.retireTableRow,
+                        isHist && { backgroundColor: 'rgba(102,126,234,0.06)' },
+                        r.isBear && { backgroundColor: 'rgba(255,59,48,0.06)' },
+                        r.isRecovery && { backgroundColor: 'rgba(255,149,0,0.06)' },
+                      ]}>
+                        {/* Ano */}
+                        <Text style={[styles.retireTableCell, { fontWeight: r.isBear ? '800' : '500', color: isHist ? '#667eea' : undefined }]}>
+                          {isHist ? '🔵' : r.isBear ? '📉' : r.isRecovery ? '🟠' : ''}{r.year}{r.isPartialYear ? '*' : ''}
+                        </Text>
+                        {/* Preço BTC */}
+                        <Text style={[styles.retireTableCell, { color: isHist ? '#8E8E93' : r.isBear ? '#FF3B30' : r.isRecovery ? '#FF9500' : '#F7931A' }]}>
+                          {r.isEmpty ? '—' : r.btcPrice >= 1e6 ? `$${(r.btcPrice / 1e6).toFixed(2)}M` : r.btcPrice >= 1e3 ? `$${(r.btcPrice / 1e3).toFixed(0)}k` : `$${r.btcPrice.toFixed(0)}`}
+                          {isHist && !r.isEmpty ? ' ⌀' : ''}
+                        </Text>
+                        {/* BTC comprado */}
+                        <Text style={[styles.retireTableCell, { color: isHist ? '#667eea' : undefined }]}>
+                          {r.isEmpty ? '—' : `${(r.btcBought * 1e6).toFixed(0)} sats`}
+                        </Text>
+                        {/* Total BTC */}
+                        <Text style={styles.retireTableCell}>
+                          {hideValues ? '***' : (isHist && r.isEmpty && r.cumBTC === 0) ? '—' : r.cumBTC.toFixed(4)}
+                        </Text>
+                        {/* Valor BRL */}
+                        <Text style={[styles.retireTableCell, { color: isHist ? '#667eea' : r.isBear ? '#FF3B30' : '#F7931A' }]}>
+                          {isHist
+                            ? (r.isEmpty ? '—' : hideValues ? '***' : r.investedBRL >= 1e6 ? `${(r.investedBRL / 1e6).toFixed(1)}M` : `${(r.investedBRL / 1000).toFixed(0)}k`)
+                            : hideValues ? '***' : r.portfolioBRL >= 1e6 ? `${(r.portfolioBRL / 1e6).toFixed(1)}M` : `${(r.portfolioBRL / 1000).toFixed(0)}k`}
+                        </Text>
+                        {/* Real (IPCA) */}
+                        <Text style={[styles.retireTableCell, { color: '#667eea' }]}>
+                          {isHist ? '—' : hideValues ? '***' : r.realBRL >= 1e6 ? `${(r.realBRL / 1e6).toFixed(1)}M` : `${(r.realBRL / 1000).toFixed(0)}k`}
+                        </Text>
+                        {/* Líq. IR */}
+                        <Text style={[styles.retireTableCell, { color: '#34C759' }]}>
+                          {isHist ? '—' : hideValues ? '***' : r.netBRL >= 1e6 ? `${(r.netBRL / 1e6).toFixed(1)}M` : `${(r.netBRL / 1000).toFixed(0)}k`}
+                        </Text>
+                      </View>
+                    );
+                  })}
                 </View>
               </ScrollView>
-              <Text style={styles.retireTableNote}>📉 crash • 🟠 recuperação • IR = 15% s/ lucro | * ano parcial ({monthsRemainingThisYear} meses) | valores em R$</Text>
+              <Text style={styles.retireTableNote}>🔵 histórico real (Valor BRL = investido | ⌀ = preço médio pago) • 📉 crash • 🟠 recuperação • IR = 15% s/ lucro | * ano parcial ({monthsRemainingThisYear} meses) | valores em R$</Text>
             </View>
           )}
 
