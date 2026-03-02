@@ -3140,7 +3140,25 @@ export default function App() {
     const btcPriceNow = currentBtcPrice ?? 85000;
     const dollarRateNow = currentDollarRate ?? 5.8;
 
+    // Auto-aporte: média dos últimos 6 meses (retrato atual, não histórico completo)
+    const AUTO_APORTE_WINDOW = 6;
     const autoAporteBRL = (() => {
+      if (btcPurchases.length === 0) return 0;
+      const now = new Date();
+      const cutoff = new Date(now.getFullYear(), now.getMonth() - AUTO_APORTE_WINDOW, 1);
+      const recent = btcPurchases.filter(p => new Date(p.date) >= cutoff);
+      if (recent.length === 0) {
+        // fallback: média de toda a história se não houver compras recentes
+        if (btcPurchases.length < 2) return 0;
+        const first = new Date(btcPurchases[0].date);
+        const last = new Date(btcPurchases[btcPurchases.length - 1].date);
+        const months = Math.max(1, (last.getFullYear() - first.getFullYear()) * 12 + (last.getMonth() - first.getMonth()));
+        return btcPurchases.reduce((s, p) => s + p.pricePaid * p.dollarRate, 0) / months;
+      }
+      return recent.reduce((s, p) => s + p.pricePaid * p.dollarRate, 0) / AUTO_APORTE_WINDOW;
+    })();
+    // Média histórica completa (para referência no hint)
+    const autoAporteHistBRL = (() => {
       if (btcPurchases.length < 2) return 0;
       const first = new Date(btcPurchases[0].date);
       const last = new Date(btcPurchases[btcPurchases.length - 1].date);
@@ -3155,7 +3173,15 @@ export default function App() {
       const now = new Date();
       return Math.max(1, (now.getFullYear() - first.getFullYear()) * 12 + (now.getMonth() - first.getMonth()));
     })();
-    const actualMonthlyBTC = monthsSinceFirst > 0 ? existingBTC / monthsSinceFirst : 0;
+    // actualMonthlyBTC: ritmo dos últimos 6 meses (não média desde sempre)
+    const actualMonthlyBTC = (() => {
+      if (btcPurchases.length === 0) return 0;
+      const now = new Date();
+      const cutoff = new Date(now.getFullYear(), now.getMonth() - AUTO_APORTE_WINDOW, 1);
+      const recent = btcPurchases.filter(p => new Date(p.date) >= cutoff);
+      if (recent.length === 0) return existingBTC / Math.max(1, monthsSinceFirst);
+      return recent.reduce((s, p) => s + p.quantity, 0) / AUTO_APORTE_WINDOW;
+    })();
     const btcNeeded = Math.max(0, retireSettings.targetBtc - existingBTC);
     // Anos restantes do plano (de hoje até o fim), não o prazo total
     const planYear = retireSettings.planStartYear > 0
@@ -3470,7 +3496,7 @@ export default function App() {
           <View style={styles.retireScenarioSummary}>
             <Text style={styles.retireScenarioSummaryItem}>📈 CAGR: <Text style={{ fontWeight: '800' }}>{retireSettings.btcCagr}%{retireSettings.useDecreasingCagr ? ' ↓' : ''}</Text></Text>
             <Text style={styles.retireScenarioSummaryItem}>💵 USD/BRL: <Text style={{ fontWeight: '800' }}>{retireSettings.usdBrlCagr}%</Text></Text>
-            <Text style={styles.retireScenarioSummaryItem}>💰 Aporte: <Text style={{ fontWeight: '800' }}>R${effectiveAporte.toFixed(0)}{retireSettings.aporteGrowth > 0 ? `+${retireSettings.aporteGrowth}%` : ' fixo'}</Text></Text>
+            <Text style={styles.retireScenarioSummaryItem}>💰 Aporte: <Text style={{ fontWeight: '800' }}>R${effectiveAporte.toFixed(0)}{retireSettings.aporteGrowth > 0 ? `+${retireSettings.aporteGrowth}%` : ' fixo'}</Text>{retireSettings.aporteMensal === 0 ? <Text style={{ fontSize: 10, color: '#8E8E93' }}> (6m)</Text> : null}</Text>
             <Text style={styles.retireScenarioSummaryItem}>🔥 IPCA: <Text style={{ fontWeight: '800' }}>{retireSettings.ipca}%</Text></Text>
             <Text style={styles.retireScenarioSummaryItem}>📉 Bears: <Text style={{ fontWeight: '800', color: retireSettings.bearMarkets > 0 ? '#FF3B30' : '#34C759' }}>{retireSettings.bearMarkets === 0 ? 'nenhum' : `${retireSettings.bearMarkets}x -${retireSettings.bearDepth}%`}</Text></Text>
             <Text style={styles.retireScenarioSummaryItem}>📈 Recup.: <Text style={{ fontWeight: '800' }}>{retireSettings.bearRecoveryYears} anos{retireSettings.bearStartYear > 0 ? ` (a partir de ${retireSettings.bearStartYear <= new Date().getFullYear() ? 'agora' : retireSettings.bearStartYear})` : ''}</Text></Text>
@@ -3505,7 +3531,7 @@ export default function App() {
               </View>
 
               <Text style={styles.retireConfigSection}>Aportes</Text>
-              {numInput('💰 Aporte mensal', 'aporteMensal', 'R$', `Auto: R$ ${autoAporteBRL.toFixed(0)}/mês do histórico — 0 = usar auto`)}
+              {numInput('💰 Aporte mensal', 'aporteMensal', 'R$', `0 = auto | Recente (6m): R$${autoAporteBRL.toFixed(0)}/mês | Histórico: R$${autoAporteHistBRL.toFixed(0)}/mês`)}
               {numInput('📈 Crescimento anual', 'aporteGrowth', '% a.a.', retireSettings.aporteGrowth === 0 ? '0% = aporte fixo (sem aumento). Para parar aportes, set acima como 1.' : 'Aumento % do aporte por ano (reajuste salarial)')}
 
               <Text style={styles.retireConfigSection}>Macro</Text>
